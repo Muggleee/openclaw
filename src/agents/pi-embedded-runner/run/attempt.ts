@@ -27,6 +27,7 @@ import {
   listChannelSupportedActions,
   resolveChannelMessageToolHints,
 } from "../../channel-tools.js";
+import { createCodeBuddyStreamFn, isCodeBuddyProvider } from "../../codebuddy-stream-adapter.js";
 import { resolveOpenClawDocsPath } from "../../docs-path.js";
 import { isTimeoutError } from "../../failover-error.js";
 import { resolveModelAuthMode } from "../../model-auth.js";
@@ -515,7 +516,13 @@ export async function runEmbeddedAttempt(
       });
 
       // Force a stable streamFn reference so vitest can reliably mock @mariozechner/pi-ai.
-      activeSession.agent.streamFn = streamSimple;
+      // For CodeBuddy provider, use the custom adapter that wraps the CodeBuddy SDK.
+      if (isCodeBuddyProvider(params.provider)) {
+        // CodeBuddy SDK communicates with local CLI process, no API key needed
+        activeSession.agent.streamFn = createCodeBuddyStreamFn();
+      } else {
+        activeSession.agent.streamFn = streamSimple;
+      }
 
       applyExtraParamsToAgent(
         activeSession.agent,

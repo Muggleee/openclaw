@@ -96,6 +96,16 @@ const QIANFAN_DEFAULT_COST = {
   cacheWrite: 0,
 };
 
+// CodeBuddy provider constants
+const CODEBUDDY_DEFAULT_CONTEXT_WINDOW = 200000;
+const CODEBUDDY_DEFAULT_MAX_TOKENS = 16384;
+const CODEBUDDY_DEFAULT_COST = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+};
+
 interface OllamaModel {
   name: string;
   modified_at: string;
@@ -454,6 +464,109 @@ export function buildQianfanProvider(): ProviderConfig {
   };
 }
 
+export function buildCodeBuddyProvider(): ProviderConfig {
+  return {
+    // CodeBuddy uses a custom streamFn adapter, not a standard HTTP API
+    // The baseUrl is a placeholder since we use the SDK directly
+    // CodeBuddy uses a local CLI process via SDK, not a standard HTTP API.
+    // This URL is a placeholder; the actual call goes through the SDK adapter.
+    baseUrl: "codebuddy-sdk://local",
+    api: "anthropic-messages",
+    models: [
+      {
+        id: "claude-opus-4.6",
+        name: "Claude Opus 4.6 (CodeBuddy)",
+        reasoning: true,
+        input: ["text", "image"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: CODEBUDDY_DEFAULT_CONTEXT_WINDOW,
+        maxTokens: CODEBUDDY_DEFAULT_MAX_TOKENS,
+      },
+      {
+        id: "claude-4.5",
+        name: "Claude 4.5 (CodeBuddy)",
+        reasoning: false,
+        input: ["text", "image"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: CODEBUDDY_DEFAULT_CONTEXT_WINDOW,
+        maxTokens: CODEBUDDY_DEFAULT_MAX_TOKENS,
+      },
+      {
+        id: "claude-opus-4.5",
+        name: "Claude Opus 4.5 (CodeBuddy)",
+        reasoning: true,
+        input: ["text", "image"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: CODEBUDDY_DEFAULT_CONTEXT_WINDOW,
+        maxTokens: CODEBUDDY_DEFAULT_MAX_TOKENS,
+      },
+      {
+        id: "claude-haiku-4.5",
+        name: "Claude Haiku 4.5 (CodeBuddy)",
+        reasoning: false,
+        input: ["text", "image"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: CODEBUDDY_DEFAULT_CONTEXT_WINDOW,
+        maxTokens: CODEBUDDY_DEFAULT_MAX_TOKENS,
+      },
+      {
+        id: "gemini-2.5-pro",
+        name: "Gemini 2.5 Pro (CodeBuddy)",
+        reasoning: true,
+        input: ["text", "image"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: CODEBUDDY_DEFAULT_CONTEXT_WINDOW,
+        maxTokens: CODEBUDDY_DEFAULT_MAX_TOKENS,
+      },
+      {
+        id: "gemini-3.0-pro",
+        name: "Gemini 3.0 Pro (CodeBuddy)",
+        reasoning: true,
+        input: ["text", "image"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: CODEBUDDY_DEFAULT_CONTEXT_WINDOW,
+        maxTokens: CODEBUDDY_DEFAULT_MAX_TOKENS,
+      },
+      {
+        id: "gemini-3.0-flash",
+        name: "Gemini 3.0 Flash (CodeBuddy)",
+        reasoning: false,
+        input: ["text", "image"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: CODEBUDDY_DEFAULT_CONTEXT_WINDOW,
+        maxTokens: CODEBUDDY_DEFAULT_MAX_TOKENS,
+      },
+      {
+        id: "gpt-5.2",
+        name: "GPT-5.2 (CodeBuddy)",
+        reasoning: false,
+        input: ["text", "image"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: CODEBUDDY_DEFAULT_CONTEXT_WINDOW,
+        maxTokens: CODEBUDDY_DEFAULT_MAX_TOKENS,
+      },
+      {
+        id: "gpt-5.1",
+        name: "GPT-5.1 (CodeBuddy)",
+        reasoning: false,
+        input: ["text", "image"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: CODEBUDDY_DEFAULT_CONTEXT_WINDOW,
+        maxTokens: CODEBUDDY_DEFAULT_MAX_TOKENS,
+      },
+      {
+        id: "deepseek-v3-2-volc-ioa",
+        name: "DeepSeek V3.2 (CodeBuddy)",
+        reasoning: true,
+        input: ["text"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: CODEBUDDY_DEFAULT_CONTEXT_WINDOW,
+        maxTokens: CODEBUDDY_DEFAULT_MAX_TOKENS,
+      },
+    ],
+  };
+}
+
 export async function resolveImplicitProviders(params: {
   agentDir: string;
 }): Promise<ModelsConfig["providers"]> {
@@ -565,6 +678,10 @@ export async function resolveImplicitProviders(params: {
   if (qianfanKey) {
     providers.qianfan = { ...buildQianfanProvider(), apiKey: qianfanKey };
   }
+
+  // CodeBuddy SDK communicates with local CLI process, no API key needed.
+  // Always register the provider so it's available when CLI is installed.
+  providers.codebuddy = { ...buildCodeBuddyProvider(), apiKey: "codebuddy-sdk-local" };
 
   return providers;
 }
