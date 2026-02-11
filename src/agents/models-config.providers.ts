@@ -680,8 +680,11 @@ export async function resolveImplicitProviders(params: {
   }
 
   // CodeBuddy SDK communicates with local CLI process, no API key needed.
-  // Always register the provider so it's available when CLI is installed.
-  providers.codebuddy = { ...buildCodeBuddyProvider(), apiKey: "codebuddy-sdk-local" };
+  // Register when the user has a codebuddy auth profile or explicit config.
+  const codebuddyKey = resolveApiKeyFromProfiles({ provider: "codebuddy", store: authStore });
+  if (codebuddyKey) {
+    providers.codebuddy = { ...buildCodeBuddyProvider(), apiKey: codebuddyKey };
+  }
 
   return providers;
 }

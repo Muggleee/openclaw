@@ -169,7 +169,7 @@ function convertContextMessageToCodeBuddy(msg: ContextMessage): CodeBuddyInputMe
   // Convert content to CodeBuddy format
   if (typeof content === "string") {
     return {
-      role: role as "user" | "assistant",
+      role: role,
       content: content,
     };
   }
@@ -203,13 +203,13 @@ function convertContextMessageToCodeBuddy(msg: ContextMessage): CodeBuddyInputMe
       }
     }
     return {
-      role: role as "user" | "assistant",
+      role: role,
       content: blocks.length > 0 ? blocks : "",
     };
   }
 
   return {
-    role: role as "user" | "assistant",
+    role: role,
     content: "",
   };
 }
@@ -329,7 +329,7 @@ export function createCodeBuddyStreamFn(options?: { queryFn?: CodeBuddyQueryFn }
     const eventStream = createAssistantMessageEventStream();
 
     // Start async processing
-    (async () => {
+    void (async () => {
       // Dynamically import the SDK if not provided (allows for testing with mocks)
       if (!resolvedQueryFn) {
         try {
@@ -496,13 +496,13 @@ export function createCodeBuddyStreamFn(options?: { queryFn?: CodeBuddyQueryFn }
               model: model.id,
               api: "anthropic-messages",
               timestamp: Date.now(),
-              stopReason: stopReason as "stop" | "length" | "toolUse",
+              stopReason: stopReason,
               usage: currentUsage,
             };
 
             eventStream.push({
               type: "done",
-              reason: stopReason as "stop" | "length" | "toolUse",
+              reason: stopReason,
               message: finalMessage,
             });
           }
