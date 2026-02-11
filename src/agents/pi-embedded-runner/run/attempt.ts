@@ -30,7 +30,7 @@ import {
 import { createCodeBuddyStreamFn, isCodeBuddyProvider } from "../../codebuddy-stream-adapter.js";
 import { resolveOpenClawDocsPath } from "../../docs-path.js";
 import { isTimeoutError } from "../../failover-error.js";
-import { resolveApiKeyForProvider, resolveModelAuthMode } from "../../model-auth.js";
+import { resolveModelAuthMode } from "../../model-auth.js";
 import { resolveDefaultModelForAgent } from "../../model-selection.js";
 import {
   isCloudCodeAssistFormatError,

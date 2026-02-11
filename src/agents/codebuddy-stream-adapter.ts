@@ -10,7 +10,6 @@ import type { StreamFn } from "@mariozechner/pi-agent-core";
 import {
   type Api,
   type AssistantMessage,
-  type AssistantMessageEvent,
   type Context,
   createAssistantMessageEventStream,
   type Model,
