@@ -41,6 +41,8 @@ export async function applyAuthChoice(
   params: ApplyAuthChoiceParams,
 ): Promise<ApplyAuthChoiceResult> {
   const handlers: Array<(p: ApplyAuthChoiceParams) => Promise<ApplyAuthChoiceResult | null>> = [
+    // CodeBuddy uses local CLI, no auth needed — just return config as-is
+    async (p) => (p.authChoice === "codebuddy" ? { config: p.config } : null),
     applyAuthChoiceAnthropic,
     applyAuthChoiceOpenAI,
     applyAuthChoiceOAuth,
