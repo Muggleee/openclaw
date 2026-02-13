@@ -90,10 +90,62 @@ jobs:
           if git merge "${MERGE_REF}" --no-edit; then
             echo "merge_success=true" >> "$GITHUB_OUTPUT"
           else
-            echo "merge_success=false" >> "$GITHUB_OUTPUT"
-            echo "::error::合并冲突！需要手动解决。"
-            git merge --abort
-            exit 1
+            echo "检测到冲突，尝试自动解决..."
+
+            # 获取冲突文件列表
+            CONFLICTED="$(git diff --name-only --diff-filter=U)"
+            echo "冲突文件: ${CONFLICTED}"
+
+            # 检查是否只有可自动解决的文件冲突
+            UNEXPECTED=""
+            for f in ${CONFLICTED}; do
+              case "${f}" in
+                package.json|pnpm-lock.yaml|.npmrc|.github/workflows/*)
+                  echo "可自动解决: ${f}"
+                  ;;
+                *)
+                  UNEXPECTED="${UNEXPECTED} ${f}"
+                  ;;
+              esac
+            done
+
+            if [ -n "${UNEXPECTED}" ]; then
+              echo "::error::以下文件存在无法自动解决的冲突:${UNEXPECTED}"
+              git merge --abort
+              echo "merge_success=false" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+
+            # package.json: 接受上游版本，稍后会覆写 name/version/publishConfig
+            if echo "${CONFLICTED}" | grep -q "^package.json$"; then
+              git checkout --theirs package.json
+              git add package.json
+            fi
+
+            # pnpm-lock.yaml: 接受上游版本，稍后 pnpm install 会重新生成
+            if echo "${CONFLICTED}" | grep -q "^pnpm-lock.yaml$"; then
+              git checkout --theirs pnpm-lock.yaml
+              git add pnpm-lock.yaml
+            fi
+
+            # .npmrc: 保留 fork 版本（包含 CNB registry 配置）
+            if echo "${CONFLICTED}" | grep -q "^\.npmrc$"; then
+              git checkout --ours .npmrc
+              git add .npmrc
+            fi
+
+            # .github/workflows/*: 保留 fork 版本（已禁用/已适配的 workflows）
+            for f in ${CONFLICTED}; do
+              if [[ "${f}" == .github/workflows/* ]]; then
+                git checkout --ours "${f}"
+                git add "${f}"
+              fi
+            done
+
+            # 完成合并
+            git -c core.editor=true merge --continue
+            echo "冲突已自动解决"
+            echo "merge_success=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Update version
@@ -104,11 +156,15 @@ jobs:
           UPSTREAM_VER="${{ steps.check.outputs.upstream_version }}"
           NEW_VER="${UPSTREAM_VER}-codebuddy.1"
 
-          # 更新 package.json 中的版本号
+          # 更新 package.json: 恢复 fork 的 name/publishConfig + 设置新版本号
           node -e "
             const fs = require('fs');
             const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.name = 'openclaw';
             pkg.version = '${NEW_VER}';
+            pkg.publishConfig = {
+              registry: '${{ env.CNB_REGISTRY }}'
+            };
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
 
