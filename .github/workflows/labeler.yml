@@ -10,6 +10,7 @@ permissions: {}
 
 jobs:
   label:
+    if: false # disabled: requires GH_APP_PRIVATE_KEY
     permissions:
       contents: read
       pull-requests: write
@@ -60,6 +61,7 @@ jobs:
             });
 
   label-issues:
+    if: false # disabled: requires GH_APP_PRIVATE_KEY
     permissions:
       issues: write
     runs-on: ubuntu-latest
