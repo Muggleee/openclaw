@@ -1,0 +1,168 @@
+name: Sync Upstream & Publish
+
+# 每天 UTC 8:00（北京时间 16:00）自动检测上游新版本
+# 也可通过 Actions 页面手动触发
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: https://github.com/openclaw/openclaw.git
+  CNB_REGISTRY: https://npm.cnb.cool/mugglezack/openclaw-cb/-/packages/
+  NODE_VERSION: "22"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Check upstream version
+        id: check
+        run: |
+          set -euo pipefail
+
+          # 获取官方最新版本（从 npm 公共 registry）
+          UPSTREAM_VER="$(npm view openclaw version --registry=https://registry.npmjs.org/)"
+          echo "upstream_version=${UPSTREAM_VER}" >> "$GITHUB_OUTPUT"
+
+          # 获取本地基准版本（去掉 -codebuddy.N 后缀）
+          LOCAL_VER="$(node -p "require('./package.json').version")"
+          BASE_VER="$(echo "${LOCAL_VER}" | sed 's/-codebuddy\..*//')"
+          echo "local_version=${LOCAL_VER}" >> "$GITHUB_OUTPUT"
+          echo "base_version=${BASE_VER}" >> "$GITHUB_OUTPUT"
+
+          echo "上游版本: ${UPSTREAM_VER}"
+          echo "本地版本: ${LOCAL_VER} (基准: ${BASE_VER})"
+
+          if [ "${UPSTREAM_VER}" = "${BASE_VER}" ]; then
+            echo "已是最新版本，无需同步。"
+            echo "needs_sync=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "检测到新版本，开始同步。"
+            echo "needs_sync=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Merge upstream
+        if: steps.check.outputs.needs_sync == 'true'
+        id: merge
+        run: |
+          set -euo pipefail
+
+          UPSTREAM_VER="${{ steps.check.outputs.upstream_version }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git remote add upstream "${{ env.UPSTREAM_REPO }}" || true
+          git fetch upstream --tags
+
+          # 尝试通过 tag 合并，如果 tag 不存在则用 main 分支
+          TAG="v${UPSTREAM_VER}"
+          if git rev-parse "upstream/tags/${TAG}" &>/dev/null; then
+            MERGE_REF="${TAG}"
+          elif git tag -l "${TAG}" | grep -q "${TAG}"; then
+            MERGE_REF="${TAG}"
+          else
+            echo "Tag ${TAG} 不存在，使用 upstream/main"
+            MERGE_REF="upstream/main"
+          fi
+
+          echo "合并目标: ${MERGE_REF}"
+
+          if git merge "${MERGE_REF}" --no-edit; then
+            echo "merge_success=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "merge_success=false" >> "$GITHUB_OUTPUT"
+            echo "::error::合并冲突！需要手动解决。"
+            git merge --abort
+            exit 1
+          fi
+
+      - name: Update version
+        if: steps.check.outputs.needs_sync == 'true' && steps.merge.outputs.merge_success == 'true'
+        run: |
+          set -euo pipefail
+
+          UPSTREAM_VER="${{ steps.check.outputs.upstream_version }}"
+          NEW_VER="${UPSTREAM_VER}-codebuddy.1"
+
+          # 更新 package.json 中的版本号
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.version = '${NEW_VER}';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+
+          echo "版本号已更新为: ${NEW_VER}"
+
+      - name: Install dependencies
+        if: steps.check.outputs.needs_sync == 'true' && steps.merge.outputs.merge_success == 'true'
+        run: pnpm install --frozen-lockfile || pnpm install
+
+      - name: Build
+        if: steps.check.outputs.needs_sync == 'true' && steps.merge.outputs.merge_success == 'true'
+        run: pnpm build
+
+      - name: Test
+        if: steps.check.outputs.needs_sync == 'true' && steps.merge.outputs.merge_success == 'true'
+        run: pnpm test
+        continue-on-error: true
+
+      - name: Publish to CNB
+        if: steps.check.outputs.needs_sync == 'true' && steps.merge.outputs.merge_success == 'true'
+        env:
+          CNB_NPM_TOKEN: ${{ secrets.CNB_NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # 配置认证
+          echo "//npm.cnb.cool/mugglezack/openclaw-cb/-/packages/:_authToken=${CNB_NPM_TOKEN}" >> ~/.npmrc
+
+          # 发布（prerelease 版本需要 --tag latest）
+          npm publish --registry="${{ env.CNB_REGISTRY }}" --tag latest
+
+          NEW_VER="$(node -p "require('./package.json').version")"
+          echo "已发布: openclaw@${NEW_VER}"
+
+      - name: Commit & tag
+        if: steps.check.outputs.needs_sync == 'true' && steps.merge.outputs.merge_success == 'true'
+        run: |
+          set -euo pipefail
+
+          NEW_VER="$(node -p "require('./package.json').version")"
+
+          git add -A
+          git commit -m "chore: sync upstream v${{ steps.check.outputs.upstream_version }} → ${NEW_VER}" || true
+          git tag "v${NEW_VER}"
+          git push origin HEAD --tags
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## 同步结果" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 上游版本: \`${{ steps.check.outputs.upstream_version }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 本地基准: \`${{ steps.check.outputs.base_version }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 需要同步: \`${{ steps.check.outputs.needs_sync }}\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.check.outputs.needs_sync }}" = "true" ]; then
+            echo "- 合并状态: \`${{ steps.merge.outputs.merge_success || 'N/A' }}\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
