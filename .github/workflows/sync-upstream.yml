@@ -113,8 +113,7 @@ jobs:
                 src/commands/auth-choice.preferred-provider.ts| \
                 src/commands/onboard-auth.ts| \
                 src/commands/onboard-auth.credentials.ts| \
-                src/commands/onboard-types.ts| \
-                src/cli/program/register.onboard.ts)
+                src/commands/onboard-types.ts)
                   echo "可自动解决 (fork 源文件): ${f}"
                   ;;
                 *)
@@ -198,6 +197,23 @@ jobs:
               );
               fs.writeFileSync(file, content);
               console.log("Added codebuddy to AuthChoiceGroupId");
+            }
+          '
+
+          # 确保 register.onboard.ts 的 --auth-choice 没有默认值参数（第三个参数）
+          # 上游用 formatAuthChoiceChoicesForCli() 只有两个参数，不会有这个问题
+          # 但如果合并产生了三参数形式，需要修正
+          node -e '
+            const fs = require("fs");
+            const file = "src/cli/program/register.onboard.ts";
+            let content = fs.readFileSync(file, "utf8");
+            // 匹配 .option("--auth-choice <choice>", "描述", "默认值") 三参数形式
+            // 删除第三个参数，只保留前两个
+            const threeArgPattern = /(\.option\(\s*"--auth-choice <choice>",\s*(?:`[^`]*`|"[^"]*"))\s*,\s*(?:`[^`]*`|"[^"]*")\s*(\))/;
+            if (threeArgPattern.test(content)) {
+              content = content.replace(threeArgPattern, "$1$2");
+              fs.writeFileSync(file, content);
+              console.log("Fixed --auth-choice: removed default value parameter");
             }
           '
 
