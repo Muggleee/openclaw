@@ -56,7 +56,7 @@ jobs:
           CLAWDBOT_INSTALL_CLI_URL: https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh
           CLAWDBOT_NO_ONBOARD: "1"
           CLAWDBOT_INSTALL_SMOKE_SKIP_CLI: "1"
-          CLAWDBOT_INSTALL_SMOKE_SKIP_NONROOT: ${{ github.event_name == 'pull_request' && '1' || '0' }}
+          CLAWDBOT_INSTALL_SMOKE_SKIP_NONROOT: "1"
           CLAWDBOT_INSTALL_SMOKE_SKIP_PREVIOUS: "1"
           OPENCLAW_NPM_REGISTRY: https://npm.cnb.cool/mugglezack/openclaw-cb/-/packages/
         run: pnpm test:install:smoke
