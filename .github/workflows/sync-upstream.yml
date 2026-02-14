@@ -217,6 +217,47 @@ jobs:
             }
           '
 
+          # 确保 README.md 顶部包含 CodeBuddy 安装/更新说明
+          node -e '
+            const fs = require("fs");
+            const file = "README.md";
+            let content = fs.readFileSync(file, "utf8");
+            const marker = "## CodeBuddy 版本安装/更新";
+            if (!content.includes(marker)) {
+              const block = [
+                "",
+                "## CodeBuddy 版本安装/更新",
+                "",
+                "```bash",
+                "# 一键安装",
+                "npm install -g openclaw@latest --registry=https://npm.cnb.cool/mugglezack/openclaw-cb/-/packages/",
+                "",
+                "# 更新到最新版",
+                "npm i -g openclaw@latest --registry=https://npm.cnb.cool/mugglezack/openclaw-cb/-/packages/",
+                "",
+                "# 安装后运行 onboard 向导",
+                "openclaw onboard --auth-choice codebuddy",
+                "```",
+                "",
+              ].join("\n");
+              // 插入到 EXFOLIATE 行之后
+              const anchor = "</p>\n\n<p align=\"center\">";
+              const idx = content.indexOf(anchor);
+              if (idx !== -1) {
+                const insertAt = idx + "</p>".length;
+                content = content.slice(0, insertAt) + "\n" + block + content.slice(insertAt);
+              } else {
+                // fallback: 插入到第一个 ## 之前
+                const firstH2 = content.indexOf("\n## ");
+                if (firstH2 !== -1) {
+                  content = content.slice(0, firstH2) + "\n" + block + content.slice(firstH2);
+                }
+              }
+              fs.writeFileSync(file, content);
+              console.log("Injected CodeBuddy install section into README.md");
+            }
+          '
+
           echo "版本号已更新为: ${NEW_VER}"
 
       - name: Install dependencies
