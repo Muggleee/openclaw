@@ -169,7 +169,7 @@ function convertContextMessageToCodeBuddy(msg: ContextMessage): CodeBuddyInputMe
   // Convert content to CodeBuddy format
   if (typeof content === "string") {
     return {
-      role,
+      role: role,
       content: content,
     };
   }
@@ -203,13 +203,13 @@ function convertContextMessageToCodeBuddy(msg: ContextMessage): CodeBuddyInputMe
       }
     }
     return {
-      role,
+      role: role,
       content: blocks.length > 0 ? blocks : "",
     };
   }
 
   return {
-    role,
+    role: role,
     content: "",
   };
 }
@@ -496,7 +496,7 @@ export function createCodeBuddyStreamFn(options?: { queryFn?: CodeBuddyQueryFn }
               model: model.id,
               api: "anthropic-messages",
               timestamp: Date.now(),
-              stopReason,
+              stopReason: stopReason,
               usage: currentUsage,
             };
 

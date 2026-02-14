@@ -25,6 +25,7 @@ export type AuthChoiceGroupId =
   | "qwen"
   | "together"
   | "qianfan"
+  | "codebuddy"
   | "xai"
   | "custom";
 
@@ -150,6 +151,12 @@ const AUTH_CHOICE_GROUP_DEFS: {
     choices: ["cloudflare-ai-gateway-api-key"],
   },
   {
+    value: "codebuddy",
+    label: "CodeBuddy",
+    hint: "Local CLI — no API key needed",
+    choices: ["codebuddy"],
+  },
+  {
     value: "custom",
     label: "Custom Provider",
     hint: "Any OpenAI or Anthropic compatible endpoint",
@@ -259,6 +266,7 @@ export function buildAuthChoiceOptions(params: {
     label: "MiniMax M2.1 Lightning",
     hint: "Faster, higher output cost",
   });
+  options.push({ value: "codebuddy", label: "CodeBuddy (local CLI)", hint: "No API key needed" });
   options.push({ value: "custom-api-key", label: "Custom Provider" });
 
   if (params.includeSkip) {

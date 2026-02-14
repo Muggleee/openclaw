@@ -38,6 +38,7 @@ export type AuthChoice =
   | "qwen-portal"
   | "xai-api-key"
   | "qianfan-api-key"
+  | "codebuddy"
   | "custom-api-key"
   | "skip";
 export type AuthChoiceGroupId =
