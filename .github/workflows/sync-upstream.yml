@@ -113,7 +113,8 @@ jobs:
                 src/commands/auth-choice.preferred-provider.ts| \
                 src/commands/onboard-auth.ts| \
                 src/commands/onboard-auth.credentials.ts| \
-                src/commands/onboard-types.ts)
+                src/commands/onboard-types.ts| \
+                src/cli/program/register.onboard.ts)
                   echo "可自动解决 (fork 源文件): ${f}"
                   ;;
                 *)
