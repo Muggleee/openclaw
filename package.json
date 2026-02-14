@@ -1,6 +1,6 @@
 {
-  "name": "clawbuddy",
-  "version": "2026.2.9",
+  "name": "openclaw",
+  "version": "2026.2.9-codebuddy.1",
   "description": "Multi-channel AI gateway with extensible messaging integrations",
   "keywords": [],
   "license": "MIT",
@@ -26,6 +26,9 @@
     ".": "./dist/index.js",
     "./plugin-sdk": "./dist/plugin-sdk/index.js",
     "./cli-entry": "./openclaw.mjs"
+  },
+  "publishConfig": {
+    "registry": "https://npm.cnb.cool/mugglezack/openclaw-cb/-/packages/"
   },
   "scripts": {
     "android:assemble": "cd apps/android && ./gradlew :app:assembleDebug",

@@ -43,7 +43,7 @@ describe("models-config", () => {
     process.env.HOME = previousHome;
   });
 
-  it("skips writing models.json when no env token or profile exists", async () => {
+  it("writes only codebuddy provider when no env token or profile exists", async () => {
     await withTempHome(async (home) => {
       const previous = process.env.COPILOT_GITHUB_TOKEN;
       const previousGh = process.env.GH_TOKEN;
@@ -76,8 +76,12 @@ describe("models-config", () => {
           agentDir,
         );
 
-        await expect(fs.stat(path.join(agentDir, "models.json"))).rejects.toThrow();
-        expect(result.wrote).toBe(false);
+        // CodeBuddy provider is always registered (no API key needed),
+        // so models.json is written with at least that provider.
+        expect(result.wrote).toBe(true);
+        const raw = await fs.readFile(path.join(agentDir, "models.json"), "utf8");
+        const parsed = JSON.parse(raw) as { providers: Record<string, unknown> };
+        expect(Object.keys(parsed.providers)).toEqual(["codebuddy"]);
       } finally {
         if (previous === undefined) {
           delete process.env.COPILOT_GITHUB_TOKEN;

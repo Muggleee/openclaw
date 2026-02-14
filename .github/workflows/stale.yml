@@ -9,6 +9,7 @@ permissions: {}
 
 jobs:
   stale:
+    if: false # disabled: requires GH_APP_PRIVATE_KEY
     permissions:
       issues: write
       pull-requests: write

@@ -9,6 +9,7 @@ concurrency:
 
 jobs:
   formal_conformance:
+    if: false # disabled: references external formal models repo
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
