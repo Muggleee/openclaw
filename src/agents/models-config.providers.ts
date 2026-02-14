@@ -112,9 +112,7 @@ const QIANFAN_DEFAULT_COST = {
   cacheWrite: 0,
 };
 
-// CodeBuddy provider constants
-const CODEBUDDY_DEFAULT_CONTEXT_WINDOW = 200000;
-const CODEBUDDY_DEFAULT_MAX_TOKENS = 16384;
+// CodeBuddy provider constants (IOA version — all models are free)
 const CODEBUDDY_DEFAULT_COST = {
   input: 0,
   output: 0,
@@ -619,104 +617,212 @@ export function buildQianfanProvider(): ProviderConfig {
   };
 }
 
+/**
+ * Build the CodeBuddy provider configuration.
+ * Model list and parameters sourced from @tencent-ai/agent-sdk cli/product.ioa.json.
+ */
 export function buildCodeBuddyProvider(): ProviderConfig {
   return {
-    // CodeBuddy uses a custom streamFn adapter, not a standard HTTP API
-    // The baseUrl is a placeholder since we use the SDK directly
     // CodeBuddy uses a local CLI process via SDK, not a standard HTTP API.
     // This URL is a placeholder; the actual call goes through the SDK adapter.
     baseUrl: "codebuddy-sdk://local",
     api: "anthropic-messages",
     models: [
+      // --- Claude models ---
       {
         id: "claude-opus-4.6",
-        name: "Claude Opus 4.6 (CodeBuddy)",
+        name: "Claude Opus 4.6",
         reasoning: true,
         input: ["text", "image"],
         cost: CODEBUDDY_DEFAULT_COST,
-        contextWindow: CODEBUDDY_DEFAULT_CONTEXT_WINDOW,
-        maxTokens: CODEBUDDY_DEFAULT_MAX_TOKENS,
-      },
-      {
-        id: "claude-4.5",
-        name: "Claude 4.5 (CodeBuddy)",
-        reasoning: false,
-        input: ["text", "image"],
-        cost: CODEBUDDY_DEFAULT_COST,
-        contextWindow: CODEBUDDY_DEFAULT_CONTEXT_WINDOW,
-        maxTokens: CODEBUDDY_DEFAULT_MAX_TOKENS,
+        contextWindow: 176000,
+        maxTokens: 24000,
       },
       {
         id: "claude-opus-4.5",
-        name: "Claude Opus 4.5 (CodeBuddy)",
+        name: "Claude Opus 4.5",
         reasoning: true,
         input: ["text", "image"],
         cost: CODEBUDDY_DEFAULT_COST,
-        contextWindow: CODEBUDDY_DEFAULT_CONTEXT_WINDOW,
-        maxTokens: CODEBUDDY_DEFAULT_MAX_TOKENS,
+        contextWindow: 176000,
+        maxTokens: 24000,
+      },
+      {
+        id: "claude-4.5",
+        name: "Claude Sonnet 4.5",
+        reasoning: true,
+        input: ["text", "image"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: 176000,
+        maxTokens: 24000,
       },
       {
         id: "claude-haiku-4.5",
-        name: "Claude Haiku 4.5 (CodeBuddy)",
-        reasoning: false,
-        input: ["text", "image"],
-        cost: CODEBUDDY_DEFAULT_COST,
-        contextWindow: CODEBUDDY_DEFAULT_CONTEXT_WINDOW,
-        maxTokens: CODEBUDDY_DEFAULT_MAX_TOKENS,
-      },
-      {
-        id: "gemini-2.5-pro",
-        name: "Gemini 2.5 Pro (CodeBuddy)",
+        name: "Claude Haiku 4.5",
         reasoning: true,
         input: ["text", "image"],
         cost: CODEBUDDY_DEFAULT_COST,
-        contextWindow: CODEBUDDY_DEFAULT_CONTEXT_WINDOW,
-        maxTokens: CODEBUDDY_DEFAULT_MAX_TOKENS,
+        contextWindow: 176000,
+        maxTokens: 24000,
       },
-      {
-        id: "gemini-3.0-pro",
-        name: "Gemini 3.0 Pro (CodeBuddy)",
-        reasoning: true,
-        input: ["text", "image"],
-        cost: CODEBUDDY_DEFAULT_COST,
-        contextWindow: CODEBUDDY_DEFAULT_CONTEXT_WINDOW,
-        maxTokens: CODEBUDDY_DEFAULT_MAX_TOKENS,
-      },
-      {
-        id: "gemini-3.0-flash",
-        name: "Gemini 3.0 Flash (CodeBuddy)",
-        reasoning: false,
-        input: ["text", "image"],
-        cost: CODEBUDDY_DEFAULT_COST,
-        contextWindow: CODEBUDDY_DEFAULT_CONTEXT_WINDOW,
-        maxTokens: CODEBUDDY_DEFAULT_MAX_TOKENS,
-      },
+      // --- GPT models ---
       {
         id: "gpt-5.2",
-        name: "GPT-5.2 (CodeBuddy)",
-        reasoning: false,
+        name: "GPT-5.2",
+        reasoning: true,
         input: ["text", "image"],
         cost: CODEBUDDY_DEFAULT_COST,
-        contextWindow: CODEBUDDY_DEFAULT_CONTEXT_WINDOW,
-        maxTokens: CODEBUDDY_DEFAULT_MAX_TOKENS,
+        contextWindow: 272000,
+        maxTokens: 128000,
+      },
+      {
+        id: "gpt-5.2-codex",
+        name: "GPT-5.2 Codex",
+        reasoning: true,
+        input: ["text", "image"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: 272000,
+        maxTokens: 128000,
       },
       {
         id: "gpt-5.1",
-        name: "GPT-5.1 (CodeBuddy)",
-        reasoning: false,
+        name: "GPT-5.1",
+        reasoning: true,
         input: ["text", "image"],
         cost: CODEBUDDY_DEFAULT_COST,
-        contextWindow: CODEBUDDY_DEFAULT_CONTEXT_WINDOW,
-        maxTokens: CODEBUDDY_DEFAULT_MAX_TOKENS,
+        contextWindow: 272000,
+        maxTokens: 128000,
       },
       {
+        id: "gpt-5.1-codex",
+        name: "GPT-5.1 Codex",
+        reasoning: true,
+        input: ["text", "image"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: 272000,
+        maxTokens: 128000,
+      },
+      {
+        id: "gpt-5.1-codex-max",
+        name: "GPT-5.1 Codex Max",
+        reasoning: true,
+        input: ["text", "image"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: 272000,
+        maxTokens: 128000,
+      },
+      {
+        id: "gpt-5.1-codex-mini",
+        name: "GPT-5.1 Codex Mini",
+        reasoning: true,
+        input: ["text", "image"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: 272000,
+        maxTokens: 128000,
+      },
+      // --- Gemini models ---
+      {
+        id: "gemini-3.0-pro",
+        name: "Gemini 3.0 Pro",
+        reasoning: true,
+        input: ["text", "image"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: 400000,
+        maxTokens: 64000,
+      },
+      {
+        id: "gemini-3.0-flash",
+        name: "Gemini 3.0 Flash",
+        reasoning: true,
+        input: ["text", "image"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: 400000,
+        maxTokens: 64000,
+      },
+      {
+        id: "gemini-2.5-pro",
+        name: "Gemini 2.5 Pro",
+        reasoning: true,
+        input: ["text", "image"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: 400000,
+        maxTokens: 64000,
+      },
+      // --- DeepSeek ---
+      {
         id: "deepseek-v3-2-volc-ioa",
-        name: "DeepSeek V3.2 (CodeBuddy)",
+        name: "DeepSeek V3.2",
         reasoning: true,
         input: ["text"],
         cost: CODEBUDDY_DEFAULT_COST,
-        contextWindow: CODEBUDDY_DEFAULT_CONTEXT_WINDOW,
-        maxTokens: CODEBUDDY_DEFAULT_MAX_TOKENS,
+        contextWindow: 96000,
+        maxTokens: 32000,
+      },
+      // --- MiniMax ---
+      {
+        id: "minimax-m2.5-ioa",
+        name: "MiniMax M2.5",
+        reasoning: true,
+        input: ["text"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: 200000,
+        maxTokens: 48000,
+      },
+      // --- Kimi ---
+      {
+        id: "kimi-k2.5-ioa",
+        name: "Kimi K2.5",
+        reasoning: true,
+        input: ["text", "image"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: 164000,
+        maxTokens: 32000,
+      },
+      {
+        id: "kimi-k2-thinking",
+        name: "Kimi K2 Thinking",
+        reasoning: true,
+        input: ["text"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: 164000,
+        maxTokens: 32000,
+      },
+      // --- GLM models ---
+      {
+        id: "glm-5.0-ioa",
+        name: "GLM 5.0",
+        reasoning: true,
+        input: ["text"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: 200000,
+        maxTokens: 48000,
+      },
+      {
+        id: "glm-4.7-ioa",
+        name: "GLM 4.7",
+        reasoning: true,
+        input: ["text"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: 160000,
+        maxTokens: 48000,
+      },
+      {
+        id: "glm-4.6v-ioa",
+        name: "GLM 4.6V",
+        reasoning: true,
+        input: ["text", "image"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: 128000,
+        maxTokens: 32000,
+      },
+      {
+        id: "glm-4.6-ioa",
+        name: "GLM 4.6",
+        reasoning: true,
+        input: ["text"],
+        cost: CODEBUDDY_DEFAULT_COST,
+        contextWindow: 168000,
+        maxTokens: 32000,
       },
     ],
   };
