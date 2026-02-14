@@ -6,13 +6,18 @@ SMOKE_PREVIOUS_VERSION="${OPENCLAW_INSTALL_SMOKE_PREVIOUS:-}"
 SKIP_PREVIOUS="${OPENCLAW_INSTALL_SMOKE_SKIP_PREVIOUS:-0}"
 DEFAULT_PACKAGE="openclaw"
 PACKAGE_NAME="${OPENCLAW_INSTALL_PACKAGE:-$DEFAULT_PACKAGE}"
+NPM_REGISTRY="${OPENCLAW_NPM_REGISTRY:-}"
+REGISTRY_FLAG=""
+if [[ -n "$NPM_REGISTRY" ]]; then
+  REGISTRY_FLAG="--registry=$NPM_REGISTRY"
+fi
 
 echo "==> Resolve npm versions"
-LATEST_VERSION="$(npm view "$PACKAGE_NAME" version)"
+LATEST_VERSION="$(npm view "$PACKAGE_NAME" version $REGISTRY_FLAG)"
 if [[ -n "$SMOKE_PREVIOUS_VERSION" ]]; then
   PREVIOUS_VERSION="$SMOKE_PREVIOUS_VERSION"
 else
-  VERSIONS_JSON="$(npm view "$PACKAGE_NAME" versions --json)"
+  VERSIONS_JSON="$(npm view "$PACKAGE_NAME" versions --json $REGISTRY_FLAG)"
   PREVIOUS_VERSION="$(VERSIONS_JSON="$VERSIONS_JSON" LATEST_VERSION="$LATEST_VERSION" node - <<'NODE'
 const raw = process.env.VERSIONS_JSON || "[]";
 const latest = process.env.LATEST_VERSION || "";
@@ -44,7 +49,7 @@ if [[ "$SKIP_PREVIOUS" == "1" ]]; then
   echo "==> Skip preinstall previous (OPENCLAW_INSTALL_SMOKE_SKIP_PREVIOUS=1)"
 else
   echo "==> Preinstall previous (forces installer upgrade path)"
-  npm install -g "${PACKAGE_NAME}@${PREVIOUS_VERSION}"
+  npm install -g "${PACKAGE_NAME}@${PREVIOUS_VERSION}" $REGISTRY_FLAG
 fi
 
 echo "==> Run official installer one-liner"

@@ -4,6 +4,11 @@ set -euo pipefail
 INSTALL_URL="${OPENCLAW_INSTALL_URL:-https://openclaw.bot/install.sh}"
 DEFAULT_PACKAGE="openclaw"
 PACKAGE_NAME="${OPENCLAW_INSTALL_PACKAGE:-$DEFAULT_PACKAGE}"
+NPM_REGISTRY="${OPENCLAW_NPM_REGISTRY:-}"
+REGISTRY_FLAG=""
+if [[ -n "$NPM_REGISTRY" ]]; then
+  REGISTRY_FLAG="--registry=$NPM_REGISTRY"
+fi
 
 echo "==> Pre-flight: ensure git absent"
 if command -v git >/dev/null; then
@@ -24,7 +29,7 @@ EXPECTED_VERSION="${OPENCLAW_INSTALL_EXPECT_VERSION:-}"
 if [[ -n "$EXPECTED_VERSION" ]]; then
   LATEST_VERSION="$EXPECTED_VERSION"
 else
-  LATEST_VERSION="$(npm view "$PACKAGE_NAME" version)"
+  LATEST_VERSION="$(npm view "$PACKAGE_NAME" version $REGISTRY_FLAG)"
 fi
 CLI_NAME="$PACKAGE_NAME"
 CMD_PATH="$(command -v "$CLI_NAME" || true)"
