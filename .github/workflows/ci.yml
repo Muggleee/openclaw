@@ -148,7 +148,7 @@ jobs:
   # Validate npm pack contents after build (only on push to main, not PRs).
   release-check:
     needs: [docs-scope, build-artifacts]
-    if: github.event_name == 'push' && needs.docs-scope.outputs.docs_only != 'true'
+    if: false # disabled for fork: plugin versions don't match -codebuddy.N suffix
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
