@@ -103,6 +103,19 @@ jobs:
                 package.json|pnpm-lock.yaml|.npmrc|.github/workflows/*)
                   echo "可自动解决: ${f}"
                   ;;
+                src/agents/pi-embedded-runner/run/attempt.ts| \
+                src/agents/codebuddy-stream-adapter.ts| \
+                src/agents/codebuddy.ts| \
+                src/agents/models-config.providers.ts| \
+                src/agents/model-auth.ts| \
+                src/commands/auth-choice-options.ts| \
+                src/commands/auth-choice.apply.ts| \
+                src/commands/auth-choice.preferred-provider.ts| \
+                src/commands/onboard-auth.ts| \
+                src/commands/onboard-auth.credentials.ts| \
+                src/commands/onboard-types.ts)
+                  echo "可自动解决 (fork 源文件): ${f}"
+                  ;;
                 *)
                   UNEXPECTED="${UNEXPECTED} ${f}"
                   ;;
@@ -135,8 +148,9 @@ jobs:
             fi
 
             # .github/workflows/*: 保留 fork 版本（已禁用/已适配的 workflows）
+            # src/*: fork 定制的源文件，保留 fork 版本
             for f in ${CONFLICTED}; do
-              if [[ "${f}" == .github/workflows/* ]]; then
+              if [[ "${f}" == .github/workflows/* ]] || [[ "${f}" == src/* ]]; then
                 git checkout --ours "${f}"
                 git add "${f}"
               fi
@@ -156,7 +170,7 @@ jobs:
           UPSTREAM_VER="${{ steps.check.outputs.upstream_version }}"
           NEW_VER="${UPSTREAM_VER}-codebuddy.1"
 
-          # 更新 package.json: 恢复 fork 的 name/publishConfig + 设置新版本号
+          # 更新 package.json: 恢复 fork 的 name/publishConfig/依赖 + 设置新版本号
           node -e "
             const fs = require('fs');
             const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
@@ -165,8 +179,26 @@ jobs:
             pkg.publishConfig = {
               registry: '${{ env.CNB_REGISTRY }}'
             };
+            if (!pkg.dependencies['@tencent-ai/agent-sdk']) {
+              pkg.dependencies['@tencent-ai/agent-sdk'] = '^0.3.49';
+            }
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
+
+          # 确保 onboard-types.ts 包含 codebuddy AuthChoiceGroupId
+          node -e '
+            const fs = require("fs");
+            const file = "src/commands/onboard-types.ts";
+            let content = fs.readFileSync(file, "utf8");
+            if (!content.includes("codebuddy")) {
+              content = content.replace(
+                /(\| "xai")/,
+                "| \"codebuddy\"\n  $1"
+              );
+              fs.writeFileSync(file, content);
+              console.log("Added codebuddy to AuthChoiceGroupId");
+            }
+          '
 
           echo "版本号已更新为: ${NEW_VER}"
 
