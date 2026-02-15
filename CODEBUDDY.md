@@ -17,6 +17,7 @@
 ### SDK 调用方式
 
 CodeBuddy SDK（`@tencent-ai/agent-sdk`）的 `query()` 函数：
+
 - 每次调用 spawn 一个新的 CLI 子进程（`codebuddy-code-flow`），通过 stdin/stdout JSON 通信
 - **只接受 `prompt`（字符串）和 `options` 对象**，不接受 `messages` 数组
 - SDK 内部有完整的 agentic loop：自动执行工具调用（Read/Write/Bash 等），只把最终文本结果流式返回
@@ -30,6 +31,7 @@ CodeBuddy SDK（`@tencent-ai/agent-sdk`）的 `query()` 函数：
    - 从 `context.messages` 提取历史消息（当前用户消息之前的部分）
    - 序列化为 Anthropic Messages API 格式的 JSON
    - 用 XML 标签包裹后拼入 prompt：
+
      ```
      <conversation_history>
      [{"role":"user","content":"..."},{"role":"assistant","content":"..."}]
@@ -39,6 +41,7 @@ CodeBuddy SDK（`@tencent-ai/agent-sdk`）的 `query()` 函数：
      用户当前的消息
      </current_message>
      ```
+
    - 单轮对话时不添加 history 标签，直接发送原始 prompt
 
 3. **systemPrompt 正常传递**：openclaw 的人设/系统提示通过 SDK 的 `options.systemPrompt` 参数传递，无需额外处理。
@@ -54,16 +57,10 @@ CodeBuddy SDK（`@tencent-ai/agent-sdk`）的 `query()` 函数：
 适配层测试文件：`src/agents/codebuddy-stream-adapter.test.ts`（12 个测试用例）
 
 覆盖场景：
+
 - 基本文本流式输出
 - tool_use blocks 过滤
 - 多轮对话历史拼接
 - 单轮对话 prompt 直通
 - systemPrompt 传递
 - 错误处理
-
-## 开发提示
-
-- Gateway `--force` 模式会自动加载最新构建，不需要每次都重启 gateway
-- 会话日志路径：`~/.openclaw/agents/<agentId>/sessions/*.jsonl`
-- 提交代码使用 `scripts/committer "<msg>" <file...>`（自动 lint + format）
-- 版本号更新需先获得确认，不要自行修改
