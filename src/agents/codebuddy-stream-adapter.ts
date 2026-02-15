@@ -15,7 +15,6 @@ import {
   type Model,
   type SimpleStreamOptions,
   type TextContent,
-  type ToolCall,
 } from "@mariozechner/pi-ai";
 
 // Types for CodeBuddy SDK messages
@@ -116,10 +115,11 @@ type CodeBuddyQueryOptions = {
 };
 
 // Query function type (to be imported from SDK)
+// Note: SDK's query() only uses prompt + options. It does NOT accept a messages parameter.
+// Conversation history is passed by serializing it into the prompt text.
 export type CodeBuddyQueryFn = (params: {
   prompt: string;
   options?: CodeBuddyQueryOptions;
-  messages?: CodeBuddyInputMessage[];
 }) => AsyncIterable<CodeBuddyMessage>;
 
 // Type for message content which could be string or array
@@ -232,6 +232,26 @@ function convertContextToCodeBuddyMessages(context: Context): CodeBuddyInputMess
 }
 
 /**
+ * Extract text content from a message's content field
+ */
+function extractTextFromContent(content: MessageContent | undefined): string {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .filter(
+        (b): b is { type: "text"; text: string } => b.type === "text" && typeof b.text === "string",
+      )
+      .map((b) => b.text)
+      .join("");
+  }
+
+  return "";
+}
+
+/**
  * Extract the prompt text from the last user message in the context
  */
 function extractPromptFromContext(context: Context): string {
@@ -243,20 +263,63 @@ function extractPromptFromContext(context: Context): string {
     return "";
   }
 
-  const content = lastUserMessage.content;
+  return extractTextFromContent(lastUserMessage.content);
+}
 
-  if (typeof content === "string") {
-    return content;
+/**
+ * Build the prompt with conversation history prepended.
+ *
+ * Serializes prior messages (everything except the last user message) into
+ * Anthropic Messages API JSON format wrapped in XML tags, so the model
+ * can naturally understand the conversation context.
+ *
+ * Format:
+ * <conversation_history>
+ * [{"role":"user","content":"..."},  {"role":"assistant","content":"..."}]
+ * </conversation_history>
+ *
+ * <current_message>
+ * actual user prompt
+ * </current_message>
+ */
+function buildPromptWithHistory(context: Context): string {
+  const messages = context.messages as unknown as ContextMessage[];
+  const currentPrompt = extractPromptFromContext(context);
+
+  // Find the last user message index to separate history from current
+  let lastUserIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "user") {
+      lastUserIdx = i;
+      break;
+    }
   }
 
-  if (Array.isArray(content)) {
-    const textBlock = content.find(
-      (b): b is { type: "text"; text: string } => b.type === "text" && typeof b.text === "string",
-    );
-    return textBlock?.text ?? "";
+  // No history (only one message or none), return prompt as-is
+  if (lastUserIdx <= 0) {
+    return currentPrompt;
   }
 
-  return "";
+  // Build history from messages before the last user message
+  const historyMessages = messages.slice(0, lastUserIdx);
+  const serialized: Array<{ role: string; content: string }> = [];
+
+  for (const msg of historyMessages) {
+    if (msg.role === "user" || msg.role === "assistant") {
+      const text = extractTextFromContent(msg.content);
+      if (text) {
+        serialized.push({ role: msg.role, content: text });
+      }
+    }
+  }
+
+  // No meaningful history to include
+  if (serialized.length === 0) {
+    return currentPrompt;
+  }
+
+  const historyJson = JSON.stringify(serialized, null, 2);
+  return `<conversation_history>\n${historyJson}\n</conversation_history>\n\n<current_message>\n${currentPrompt}\n</current_message>`;
 }
 
 /**
@@ -288,7 +351,7 @@ function createDefaultUsage() {
  * Create a partial AssistantMessage for events
  */
 function createPartialMessage(
-  content: Array<TextContent | ToolCall>,
+  content: Array<TextContent>,
   usage?: {
     input: number;
     output: number;
@@ -315,8 +378,18 @@ function createPartialMessage(
  * Create a StreamFn that uses CodeBuddy SDK
  *
  * This adapter transforms CodeBuddy SDK's query() output into the AssistantMessageEventStream
- * format expected by pi-ai. Tool calls are yielded as toolCall events, which allows
- * pi-coding-agent to execute them via OpenClaw's tool system.
+ * format expected by pi-ai.
+ *
+ * IMPORTANT: The CodeBuddy SDK spawns a CLI child process that runs its own agentic loop
+ * internally, including tool execution. The tool_use blocks in the SDK's assistant messages
+ * are intermediate artifacts from that internal loop — the tools have already been executed
+ * by the CLI process. We must NOT forward these as toolCall events to pi-agent-core, as
+ * that would cause pi-agent-core to attempt execution in OpenClaw's tool registry (which
+ * doesn't have matching tools), leading to "Tool not found" errors and infinite retry loops.
+ *
+ * Conversation history is serialized into the prompt as JSON (Anthropic Messages format)
+ * wrapped in XML tags. This allows the model to see prior context while keeping openclaw's
+ * session management (truncation, compaction) in full control of history length.
  */
 export function createCodeBuddyStreamFn(options?: { queryFn?: CodeBuddyQueryFn }): StreamFn {
   const { queryFn } = options ?? {};
@@ -352,9 +425,8 @@ export function createCodeBuddyStreamFn(options?: { queryFn?: CodeBuddyQueryFn }
         }
       }
 
-      // Convert context to CodeBuddy format
-      const messages = convertContextToCodeBuddyMessages(context);
-      const prompt = extractPromptFromContext(context);
+      // Build prompt with conversation history prepended
+      const prompt = buildPromptWithHistory(context);
       const systemPrompt = extractSystemPrompt(context);
 
       // Build query options
@@ -367,7 +439,7 @@ export function createCodeBuddyStreamFn(options?: { queryFn?: CodeBuddyQueryFn }
       };
 
       // Track accumulated content for building partial messages
-      const accumulatedContent: Array<TextContent | ToolCall> = [];
+      const accumulatedContent: Array<TextContent> = [];
       let contentIndex = 0;
       let currentUsage = {
         input: 0,
@@ -380,12 +452,10 @@ export function createCodeBuddyStreamFn(options?: { queryFn?: CodeBuddyQueryFn }
 
       try {
         // Call CodeBuddy SDK query()
-        // Pass conversation history (minus the last user message which is the prompt)
-        const historyMessages = messages.slice(0, -1);
+        // Conversation history is already embedded in the prompt text
         const stream = resolvedQueryFn({
           prompt,
           options: queryOptions,
-          messages: historyMessages.length > 0 ? historyMessages : undefined,
         });
 
         // Push start event
@@ -432,34 +502,11 @@ export function createCodeBuddyStreamFn(options?: { queryFn?: CodeBuddyQueryFn }
                 });
 
                 contentIndex++;
-              } else if (block.type === "tool_use") {
-                // Push toolcall_start event
-                eventStream.push({
-                  type: "toolcall_start",
-                  contentIndex,
-                  partial: createPartialMessage(accumulatedContent, currentUsage, model.id),
-                });
-
-                // Create tool call content
-                const toolCall: ToolCall = {
-                  type: "toolCall",
-                  id: block.id,
-                  name: block.name,
-                  arguments: block.input,
-                };
-                accumulatedContent.push(toolCall);
-
-                // Push toolcall_end event
-                eventStream.push({
-                  type: "toolcall_end",
-                  contentIndex,
-                  toolCall,
-                  partial: createPartialMessage(accumulatedContent, currentUsage, model.id),
-                });
-
-                contentIndex++;
               }
-              // tool_result blocks are handled by pi-coding-agent after tool execution
+              // tool_use and tool_result blocks are intentionally skipped.
+              // The CodeBuddy CLI child process runs its own agentic loop and
+              // executes tools internally. These blocks are intermediate artifacts
+              // from that loop and must not be forwarded to pi-agent-core.
             }
           } else if (message.type === "result") {
             const resultMsg = message as CodeBuddyResultMessage;
@@ -479,14 +526,12 @@ export function createCodeBuddyStreamFn(options?: { queryFn?: CodeBuddyQueryFn }
             // Also check usage from the last assistant message's inner usage
             // (SDK may put usage there instead of in result)
 
-            // Determine stop reason
+            // Determine stop reason.
+            // The SDK's CLI child process handles the full agentic loop internally,
+            // so "tool_use" stop reasons are intermediate — the CLI continues until
+            // it reaches a final "end_turn". We map everything except "max_tokens" to "stop".
             const rawStopReason = resultMsg.stop_reason;
-            const stopReason =
-              rawStopReason === "tool_use"
-                ? "toolUse"
-                : rawStopReason === "max_tokens"
-                  ? "length"
-                  : "stop";
+            const stopReason = rawStopReason === "max_tokens" ? "length" : "stop";
 
             // Push done event
             const finalMessage: AssistantMessage = {
