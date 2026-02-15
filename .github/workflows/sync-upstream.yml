@@ -97,24 +97,25 @@ jobs:
             echo "冲突文件: ${CONFLICTED}"
 
             # 检查是否只有可自动解决的文件冲突
+            # 允许的冲突来源：
+            #   - 构建/依赖: package.json, pnpm-lock.yaml, .npmrc
+            #   - CI workflows: .github/workflows/*（保留 fork 版本）
+            #   - 源文件: src/*（接受上游版本，后续 patch 注入 codebuddy）
+            #   - 配置/文档: README.md, tsconfig, vitest 等
             UNEXPECTED=""
             for f in ${CONFLICTED}; do
               case "${f}" in
-                package.json|pnpm-lock.yaml|.npmrc|.github/workflows/*)
-                  echo "可自动解决: ${f}"
+                package.json|pnpm-lock.yaml|.npmrc)
+                  echo "可自动解决 (依赖/配置): ${f}"
                   ;;
-                src/agents/pi-embedded-runner/run/attempt.ts| \
-                src/agents/codebuddy-stream-adapter.ts| \
-                src/agents/codebuddy.ts| \
-                src/agents/models-config.providers.ts| \
-                src/agents/model-auth.ts| \
-                src/commands/auth-choice-options.ts| \
-                src/commands/auth-choice.apply.ts| \
-                src/commands/auth-choice.preferred-provider.ts| \
-                src/commands/onboard-auth.ts| \
-                src/commands/onboard-auth.credentials.ts| \
-                src/commands/onboard-types.ts)
-                  echo "可自动解决 (fork 源文件): ${f}"
+                .github/workflows/*)
+                  echo "可自动解决 (CI workflow，保留 fork): ${f}"
+                  ;;
+                src/*)
+                  echo "可自动解决 (源文件，接受上游): ${f}"
+                  ;;
+                README.md|CHANGELOG.md|tsconfig*.json|vitest*.ts|*.config.ts)
+                  echo "可自动解决 (配置/文档): ${f}"
                   ;;
                 *)
                   UNEXPECTED="${UNEXPECTED} ${f}"
@@ -148,10 +149,16 @@ jobs:
             fi
 
             # .github/workflows/*: 保留 fork 版本（已禁用/已适配的 workflows）
-            # src/*: fork 定制的源文件，保留 fork 版本
+            # src/*: 接受上游版本（后续 Update version 步骤会 patch 注入 codebuddy 代码）
             for f in ${CONFLICTED}; do
-              if [[ "${f}" == .github/workflows/* ]] || [[ "${f}" == src/* ]]; then
+              if [[ "${f}" == .github/workflows/* ]]; then
                 git checkout --ours "${f}"
+                git add "${f}"
+              elif [[ "${f}" == src/* ]]; then
+                git checkout --theirs "${f}"
+                git add "${f}"
+              elif [[ "${f}" == README.md ]] || [[ "${f}" == CHANGELOG.md ]] || [[ "${f}" == tsconfig*.json ]] || [[ "${f}" == vitest*.ts ]] || [[ "${f}" == *.config.ts ]]; then
+                git checkout --theirs "${f}"
                 git add "${f}"
               fi
             done
@@ -185,7 +192,7 @@ jobs:
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
 
-          # 确保 onboard-types.ts 包含 codebuddy AuthChoiceGroupId
+          # 确保 onboard-types.ts 包含 codebuddy AuthChoiceGroupId 和 AuthChoice
           node -e '
             const fs = require("fs");
             const file = "src/commands/onboard-types.ts";
@@ -195,25 +202,35 @@ jobs:
                 /(\| "xai")/,
                 "| \"codebuddy\"\n  $1"
               );
+              content = content.replace(
+                /(\| "custom-api-key")/,
+                "| \"codebuddy\"\n  $1"
+              );
               fs.writeFileSync(file, content);
-              console.log("Added codebuddy to AuthChoiceGroupId");
+              console.log("Added codebuddy to AuthChoiceGroupId and AuthChoice");
             }
           '
 
-          # 确保 register.onboard.ts 的 --auth-choice 没有默认值参数（第三个参数）
-          # 上游用 formatAuthChoiceChoicesForCli() 只有两个参数，不会有这个问题
-          # 但如果合并产生了三参数形式，需要修正
+          # 确保 register.onboard.ts 的 --auth-choice 帮助文本包含 codebuddy
+          # 上游 v2026.2.14+ 用 AUTH_CHOICE_HELP 常量（由 formatAuthChoiceChoicesForCli 动态生成），
+          # codebuddy 会通过 auth-choice-options.ts 的 patch 自动包含，无需额外修改。
+          # 仅当旧版本使用硬编码字符串时才需要 patch。
           node -e '
             const fs = require("fs");
             const file = "src/cli/program/register.onboard.ts";
             let content = fs.readFileSync(file, "utf8");
-            // 匹配 .option("--auth-choice <choice>", "描述", "默认值") 三参数形式
-            // 删除第三个参数，只保留前两个
-            const threeArgPattern = /(\.option\(\s*"--auth-choice <choice>",\s*(?:`[^`]*`|"[^"]*"))\s*,\s*(?:`[^`]*`|"[^"]*")\s*(\))/;
-            if (threeArgPattern.test(content)) {
-              content = content.replace(threeArgPattern, "$1$2");
+            // 如果已使用动态生成的 AUTH_CHOICE_HELP，codebuddy 由 auth-choice-options patch 处理
+            if (content.includes("formatAuthChoiceChoicesForCli")) {
+              console.log("register.onboard.ts uses dynamic AUTH_CHOICE_HELP, skipping patch");
+            } else if (!content.includes("codebuddy")) {
+              // 旧版本：硬编码字符串，需要注入 codebuddy
+              if (content.match(/Auth:.*\|chutes\|/)) {
+                content = content.replace(/(\|chutes\|)(openai-codex|vllm)/, "$1codebuddy|$2");
+              } else if (content.match(/Auth:.*\|vllm\|/)) {
+                content = content.replace(/(\|vllm\|)(openai-codex)/, "$1codebuddy|$2");
+              }
               fs.writeFileSync(file, content);
-              console.log("Fixed --auth-choice: removed default value parameter");
+              console.log("Patched --auth-choice help text with codebuddy");
             }
           '
 
@@ -255,6 +272,331 @@ jobs:
               }
               fs.writeFileSync(file, content);
               console.log("Injected CodeBuddy install section into README.md");
+            }
+          '
+
+          # 确保 onboard-auth.credentials.ts 包含 setCodeBuddyProfile 函数
+          node -e '
+            const fs = require("fs");
+            const file = "src/commands/onboard-auth.credentials.ts";
+            let content = fs.readFileSync(file, "utf8");
+            if (!content.includes("setCodeBuddyProfile")) {
+              const fn = [
+                "",
+                "export function setCodeBuddyProfile(agentDir?: string) {",
+                "  upsertAuthProfile({",
+                "    profileId: \"codebuddy:default\",",
+                "    credential: {",
+                "      type: \"api_key\",",
+                "      provider: \"codebuddy\",",
+                "      key: \"codebuddy-sdk-local\",",
+                "    },",
+                "    agentDir: resolveAuthAgentDir(agentDir),",
+                "  });",
+                "}",
+                "",
+              ].join("\n");
+              content = content.trimEnd() + "\n" + fn;
+              fs.writeFileSync(file, content);
+              console.log("Added setCodeBuddyProfile to onboard-auth.credentials.ts");
+            }
+          '
+
+          # 确保 onboard-auth.ts 导出 setCodeBuddyProfile
+          node -e '
+            const fs = require("fs");
+            const file = "src/commands/onboard-auth.ts";
+            let content = fs.readFileSync(file, "utf8");
+            if (!content.includes("setCodeBuddyProfile")) {
+              content = content.replace(
+                /(writeOAuthCredentials,)/,
+                "setCodeBuddyProfile,\n  $1"
+              );
+              fs.writeFileSync(file, content);
+              console.log("Added setCodeBuddyProfile export to onboard-auth.ts");
+            }
+          '
+
+          # 确保 auth-choice-options.ts 包含 codebuddy 分组和选项
+          node -e '
+            const fs = require("fs");
+            const file = "src/commands/auth-choice-options.ts";
+            let content = fs.readFileSync(file, "utf8");
+            if (!content.includes("codebuddy")) {
+              content = content.replace(
+                /(\{\s*value: "custom",)/,
+                "{\n    value: \"codebuddy\",\n    label: \"CodeBuddy\",\n    hint: \"Local CLI — no API key needed\",\n    choices: [\"codebuddy\"],\n  },\n  $1"
+              );
+              content = content.replace(
+                /(options\.push\(\{ value: "custom-api-key")/,
+                "options.push({ value: \"codebuddy\", label: \"CodeBuddy (local CLI)\", hint: \"No API key needed\" });\n  $1"
+              );
+              fs.writeFileSync(file, content);
+              console.log("Added codebuddy to auth-choice-options.ts");
+            }
+          '
+
+          # 确保 auth-choice.preferred-provider.ts 包含 codebuddy 映射
+          node -e '
+            const fs = require("fs");
+            const file = "src/commands/auth-choice.preferred-provider.ts";
+            let content = fs.readFileSync(file, "utf8");
+            if (!content.includes("codebuddy")) {
+              content = content.replace(
+                /("custom-api-key": "custom")/,
+                "codebuddy: \"codebuddy\",\n  $1"
+              );
+              fs.writeFileSync(file, content);
+              console.log("Added codebuddy to auth-choice.preferred-provider.ts");
+            }
+          '
+
+          # 确保 auth-choice.apply.ts 包含 codebuddy handler
+          node -e '
+            const fs = require("fs");
+            const file = "src/commands/auth-choice.apply.ts";
+            let content = fs.readFileSync(file, "utf8");
+            if (!content.includes("codebuddy")) {
+              content = content.replace(
+                /(import \{ applyAuthChoiceXAI \} from "\.\/auth-choice\.apply\.xai\.js";)/,
+                "$1\nimport { applyAuthProfileConfig, setCodeBuddyProfile } from \"./onboard-auth.js\";"
+              );
+              content = content.replace(
+                /(applyAuthChoiceAnthropic,)/,
+                "async (p) => {\n      if (p.authChoice !== \"codebuddy\") {\n        return null;\n      }\n      setCodeBuddyProfile(p.agentDir);\n      const config = applyAuthProfileConfig(p.config, {\n        profileId: \"codebuddy:default\",\n        provider: \"codebuddy\",\n        mode: \"api_key\",\n      });\n      return { config };\n    },\n    $1"
+              );
+              fs.writeFileSync(file, content);
+              console.log("Added codebuddy handler to auth-choice.apply.ts");
+            }
+          '
+
+          # ============================================================
+          # Agents 目录 Patch: 注入 CodeBuddy provider 核心实现
+          # ============================================================
+
+          # Patch: src/agents/model-auth.ts — 在 resolveApiKeyForProvider 中注入 CodeBuddy 早期返回
+          node -e '
+            const fs = require("fs");
+            const file = "src/agents/model-auth.ts";
+            let content = fs.readFileSync(file, "utf8");
+            if (!content.includes("codebuddy")) {
+              const anchor = "const store = params.store ?? ensureAuthProfileStore(params.agentDir);";
+              const idx = content.indexOf(anchor);
+              if (idx === -1) { console.error("model-auth.ts: anchor not found"); process.exit(1); }
+              const injection = [
+                "  // CodeBuddy SDK communicates with local CLI process, no API key needed",
+                "  const normalized = normalizeProviderId(provider);",
+                "  if (normalized === \"codebuddy\") {",
+                "    return {",
+                "      apiKey: \"codebuddy-sdk-local\",",
+                "      source: \"codebuddy-sdk-local\",",
+                "      mode: \"api-key\",",
+                "    };",
+                "  }",
+                "",
+                "  "
+              ].join("\n");
+              content = content.slice(0, idx) + injection + content.slice(idx);
+              // Remove the duplicate "const normalized = normalizeProviderId(provider);" after store
+              const storeEnd = content.indexOf(anchor) + anchor.length;
+              const rest = content.slice(storeEnd);
+              const dupLine = "\n\n  const normalized = normalizeProviderId(provider);";
+              if (rest.startsWith(dupLine)) {
+                content = content.slice(0, storeEnd) + rest.slice(dupLine.length);
+              }
+              fs.writeFileSync(file, content);
+              console.log("Patched model-auth.ts: injected CodeBuddy early return");
+            }
+          '
+
+          # Patch: src/agents/models-config.providers.ts — 注入 CODEBUDDY_DEFAULT_COST 常量
+          node -e '
+            const fs = require("fs");
+            const file = "src/agents/models-config.providers.ts";
+            let content = fs.readFileSync(file, "utf8");
+            if (!content.includes("CODEBUDDY_DEFAULT_COST")) {
+              const anchor = "interface OllamaModel {";
+              const idx = content.indexOf(anchor);
+              if (idx === -1) { console.error("providers.ts: OllamaModel anchor not found"); process.exit(1); }
+              const injection = [
+                "// CodeBuddy provider constants (IOA version — all models are free)",
+                "const CODEBUDDY_DEFAULT_COST = {",
+                "  input: 0,",
+                "  output: 0,",
+                "  cacheRead: 0,",
+                "  cacheWrite: 0,",
+                "};",
+                "",
+                ""
+              ].join("\n");
+              content = content.slice(0, idx) + injection + content.slice(idx);
+              fs.writeFileSync(file, content);
+              console.log("Patched providers.ts: injected CODEBUDDY_DEFAULT_COST");
+            }
+          '
+
+          # Patch: src/agents/models-config.providers.ts — 注入 buildCodeBuddyProvider() 函数
+          node -e '
+            const fs = require("fs");
+            const file = "src/agents/models-config.providers.ts";
+            let content = fs.readFileSync(file, "utf8");
+            if (!content.includes("buildCodeBuddyProvider")) {
+              const anchor = "export async function resolveImplicitProviders(params: {";
+              const idx = content.indexOf(anchor);
+              if (idx === -1) { console.error("providers.ts: resolveImplicitProviders anchor not found"); process.exit(1); }
+              const models = [
+                { id: "claude-opus-4.6", name: "Claude Opus 4.6", reasoning: true, input: ["text","image"], cw: 176000, mt: 24000 },
+                { id: "claude-opus-4.5", name: "Claude Opus 4.5", reasoning: true, input: ["text","image"], cw: 176000, mt: 24000 },
+                { id: "claude-4.5", name: "Claude Sonnet 4.5", reasoning: true, input: ["text","image"], cw: 176000, mt: 24000 },
+                { id: "claude-haiku-4.5", name: "Claude Haiku 4.5", reasoning: true, input: ["text","image"], cw: 176000, mt: 24000 },
+                { id: "gpt-5.2", name: "GPT-5.2", reasoning: true, input: ["text","image"], cw: 272000, mt: 128000 },
+                { id: "gpt-5.2-codex", name: "GPT-5.2 Codex", reasoning: true, input: ["text","image"], cw: 272000, mt: 128000 },
+                { id: "gpt-5.1", name: "GPT-5.1", reasoning: true, input: ["text","image"], cw: 272000, mt: 128000 },
+                { id: "gpt-5.1-codex", name: "GPT-5.1 Codex", reasoning: true, input: ["text","image"], cw: 272000, mt: 128000 },
+                { id: "gpt-5.1-codex-max", name: "GPT-5.1 Codex Max", reasoning: true, input: ["text","image"], cw: 272000, mt: 128000 },
+                { id: "gpt-5.1-codex-mini", name: "GPT-5.1 Codex Mini", reasoning: true, input: ["text","image"], cw: 272000, mt: 128000 },
+                { id: "gemini-3.0-pro", name: "Gemini 3.0 Pro", reasoning: true, input: ["text","image"], cw: 400000, mt: 64000 },
+                { id: "gemini-3.0-flash", name: "Gemini 3.0 Flash", reasoning: true, input: ["text","image"], cw: 400000, mt: 64000 },
+                { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", reasoning: true, input: ["text","image"], cw: 400000, mt: 64000 },
+                { id: "deepseek-v3-2-volc-ioa", name: "DeepSeek V3.2", reasoning: true, input: ["text"], cw: 96000, mt: 32000 },
+                { id: "minimax-m2.5-ioa", name: "MiniMax M2.5", reasoning: true, input: ["text"], cw: 200000, mt: 48000 },
+                { id: "kimi-k2.5-ioa", name: "Kimi K2.5", reasoning: true, input: ["text","image"], cw: 164000, mt: 32000 },
+                { id: "kimi-k2-thinking", name: "Kimi K2 Thinking", reasoning: true, input: ["text"], cw: 164000, mt: 32000 },
+                { id: "glm-5.0-ioa", name: "GLM 5.0", reasoning: true, input: ["text"], cw: 200000, mt: 48000 },
+                { id: "glm-4.7-ioa", name: "GLM 4.7", reasoning: true, input: ["text"], cw: 160000, mt: 48000 },
+                { id: "glm-4.6v-ioa", name: "GLM 4.6V", reasoning: true, input: ["text","image"], cw: 128000, mt: 32000 },
+                { id: "glm-4.6-ioa", name: "GLM 4.6", reasoning: true, input: ["text"], cw: 168000, mt: 32000 }
+              ];
+              const modelLines = models.map(m =>
+                "      {\n" +
+                "        id: \"" + m.id + "\",\n" +
+                "        name: \"" + m.name + "\",\n" +
+                "        reasoning: " + m.reasoning + ",\n" +
+                "        input: [" + m.input.map(i => "\"" + i + "\"").join(", ") + "],\n" +
+                "        cost: CODEBUDDY_DEFAULT_COST,\n" +
+                "        contextWindow: " + m.cw + ",\n" +
+                "        maxTokens: " + m.mt + ",\n" +
+                "      }"
+              ).join(",\n");
+              const fn = [
+                "/**",
+                " * Build the CodeBuddy provider configuration.",
+                " * Model list and parameters sourced from @tencent-ai/agent-sdk cli/product.ioa.json.",
+                " */",
+                "export function buildCodeBuddyProvider(): ProviderConfig {",
+                "  return {",
+                "    // CodeBuddy uses a local CLI process via SDK, not a standard HTTP API.",
+                "    // This URL is a placeholder; the actual call goes through the SDK adapter.",
+                "    baseUrl: \"codebuddy-sdk://local\",",
+                "    api: \"anthropic-messages\",",
+                "    models: [",
+                modelLines,
+                "    ],",
+                "  };",
+                "}",
+                "",
+                ""
+              ].join("\n");
+              content = content.slice(0, idx) + fn + content.slice(idx);
+              fs.writeFileSync(file, content);
+              console.log("Patched providers.ts: injected buildCodeBuddyProvider()");
+            }
+          '
+
+          # Patch: src/agents/models-config.providers.ts — 在 resolveImplicitProviders 中注入 codebuddy 注册逻辑
+          node -e '
+            const fs = require("fs");
+            const file = "src/agents/models-config.providers.ts";
+            let content = fs.readFileSync(file, "utf8");
+            if (!content.includes("provider: \"codebuddy\"")) {
+              // Find the resolveImplicitProviders function body
+              const fnStart = content.indexOf("export async function resolveImplicitProviders(");
+              if (fnStart === -1) { console.error("providers.ts: resolveImplicitProviders not found"); process.exit(1); }
+              // Find "return providers;" within this function (search from fnStart)
+              const fnBody = content.slice(fnStart);
+              const retIdx = fnBody.lastIndexOf("return providers;");
+              if (retIdx === -1) { console.error("providers.ts: return providers not found"); process.exit(1); }
+              const absIdx = fnStart + retIdx;
+              const injection = [
+                "  // CodeBuddy SDK communicates with local CLI process, no API key needed.",
+                "  // Register when the user has a codebuddy auth profile or explicit config.",
+                "  const codebuddyKey = resolveApiKeyFromProfiles({ provider: \"codebuddy\", store: authStore });",
+                "  if (codebuddyKey) {",
+                "    providers.codebuddy = { ...buildCodeBuddyProvider(), apiKey: codebuddyKey };",
+                "  }",
+                "",
+                "  "
+              ].join("\n");
+              content = content.slice(0, absIdx) + injection + content.slice(absIdx);
+              fs.writeFileSync(file, content);
+              console.log("Patched providers.ts: injected codebuddy registration in resolveImplicitProviders");
+            }
+          '
+
+          # Patch: src/agents/pi-embedded-runner/run/attempt.ts — 注入 CodeBuddy import
+          node -e '
+            const fs = require("fs");
+            const file = "src/agents/pi-embedded-runner/run/attempt.ts";
+            let content = fs.readFileSync(file, "utf8");
+            if (!content.includes("codebuddy-stream-adapter")) {
+              const anchor = "import { resolveOpenClawDocsPath } from \"../../docs-path.js\";";
+              const idx = content.indexOf(anchor);
+              if (idx === -1) { console.error("attempt.ts: docs-path import anchor not found"); process.exit(1); }
+              const injection = "import { createCodeBuddyStreamFn, isCodeBuddyProvider } from \"../../codebuddy-stream-adapter.js\";\n";
+              content = content.slice(0, idx) + injection + content.slice(idx);
+              fs.writeFileSync(file, content);
+              console.log("Patched attempt.ts: injected CodeBuddy import");
+            }
+          '
+
+          # Patch: src/agents/pi-embedded-runner/run/attempt.ts — 在 Ollama 检查前注入 CodeBuddy provider 检查
+          node -e '
+            const fs = require("fs");
+            const file = "src/agents/pi-embedded-runner/run/attempt.ts";
+            let content = fs.readFileSync(file, "utf8");
+            if (!content.includes("isCodeBuddyProvider")) {
+              const anchor = "if (params.model.api === \"ollama\") {";
+              const idx = content.indexOf(anchor);
+              if (idx === -1) { console.error("attempt.ts: ollama check anchor not found"); process.exit(1); }
+              const injection = [
+                "// For CodeBuddy provider, use the custom adapter that wraps the CodeBuddy SDK.",
+                "      if (isCodeBuddyProvider(params.provider)) {",
+                "        // CodeBuddy SDK communicates with local CLI process, no API key needed",
+                "        activeSession.agent.streamFn = createCodeBuddyStreamFn();",
+                "      } else "
+              ].join("\n");
+              content = content.slice(0, idx) + injection + content.slice(idx);
+              fs.writeFileSync(file, content);
+              console.log("Patched attempt.ts: injected CodeBuddy provider check before Ollama");
+            }
+          '
+
+          # Patch: src/agents/models-config.skips-writing-models-json-no-env-token.e2e.test.ts — 修改测试名称和断言
+          node -e '
+            const fs = require("fs");
+            const file = "src/agents/models-config.skips-writing-models-json-no-env-token.e2e.test.ts";
+            let content = fs.readFileSync(file, "utf8");
+            if (!content.includes("codebuddy")) {
+              // 替换测试名称
+              content = content.replace(
+                "skips writing models.json when no env token or profile exists",
+                "writes only codebuddy provider when no env token or profile exists"
+              );
+              // 替换断言: expect(result.wrote).toBe(false) → true + 读取并检查 providers
+              const oldAssert = "expect(result.wrote).toBe(false);";
+              if (content.includes(oldAssert)) {
+                const newAssert = [
+                  "// CodeBuddy provider is always registered (no API key needed),",
+                  "        // so models.json is written with at least that provider.",
+                  "        expect(result.wrote).toBe(true);",
+                  "        const raw = await fs.readFile(path.join(agentDir, \"models.json\"), \"utf8\");",
+                  "        const parsed = JSON.parse(raw) as { providers: Record<string, unknown> };",
+                  "        expect(Object.keys(parsed.providers)).toEqual([\"codebuddy\"]);"
+                ].join("\n");
+                content = content.replace(oldAssert, newAssert);
+              }
+              fs.writeFileSync(file, content);
+              console.log("Patched test file: updated test name and assertions for codebuddy");
             }
           '
 

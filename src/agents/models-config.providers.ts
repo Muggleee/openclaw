@@ -112,6 +112,17 @@ const QIANFAN_DEFAULT_COST = {
   cacheWrite: 0,
 };
 
+const NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1";
+const NVIDIA_DEFAULT_MODEL_ID = "nvidia/llama-3.1-nemotron-70b-instruct";
+const NVIDIA_DEFAULT_CONTEXT_WINDOW = 131072;
+const NVIDIA_DEFAULT_MAX_TOKENS = 4096;
+const NVIDIA_DEFAULT_COST = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+};
+
 // CodeBuddy provider constants (IOA version — all models are free)
 const CODEBUDDY_DEFAULT_COST = {
   input: 0,
@@ -617,6 +628,42 @@ export function buildQianfanProvider(): ProviderConfig {
   };
 }
 
+export function buildNvidiaProvider(): ProviderConfig {
+  return {
+    baseUrl: NVIDIA_BASE_URL,
+    api: "openai-completions",
+    models: [
+      {
+        id: NVIDIA_DEFAULT_MODEL_ID,
+        name: "NVIDIA Llama 3.1 Nemotron 70B Instruct",
+        reasoning: false,
+        input: ["text"],
+        cost: NVIDIA_DEFAULT_COST,
+        contextWindow: NVIDIA_DEFAULT_CONTEXT_WINDOW,
+        maxTokens: NVIDIA_DEFAULT_MAX_TOKENS,
+      },
+      {
+        id: "meta/llama-3.3-70b-instruct",
+        name: "Meta Llama 3.3 70B Instruct",
+        reasoning: false,
+        input: ["text"],
+        cost: NVIDIA_DEFAULT_COST,
+        contextWindow: 131072,
+        maxTokens: 4096,
+      },
+      {
+        id: "nvidia/mistral-nemo-minitron-8b-8k-instruct",
+        name: "NVIDIA Mistral NeMo Minitron 8B Instruct",
+        reasoning: false,
+        input: ["text"],
+        cost: NVIDIA_DEFAULT_COST,
+        contextWindow: 8192,
+        maxTokens: 2048,
+      },
+    ],
+  };
+}
+
 /**
  * Build the CodeBuddy provider configuration.
  * Model list and parameters sourced from @tencent-ai/agent-sdk cli/product.ioa.json.
@@ -628,7 +675,6 @@ export function buildCodeBuddyProvider(): ProviderConfig {
     baseUrl: "codebuddy-sdk://local",
     api: "anthropic-messages",
     models: [
-      // --- Claude models ---
       {
         id: "claude-opus-4.6",
         name: "Claude Opus 4.6",
@@ -665,7 +711,6 @@ export function buildCodeBuddyProvider(): ProviderConfig {
         contextWindow: 176000,
         maxTokens: 24000,
       },
-      // --- GPT models ---
       {
         id: "gpt-5.2",
         name: "GPT-5.2",
@@ -720,7 +765,6 @@ export function buildCodeBuddyProvider(): ProviderConfig {
         contextWindow: 272000,
         maxTokens: 128000,
       },
-      // --- Gemini models ---
       {
         id: "gemini-3.0-pro",
         name: "Gemini 3.0 Pro",
@@ -748,7 +792,6 @@ export function buildCodeBuddyProvider(): ProviderConfig {
         contextWindow: 400000,
         maxTokens: 64000,
       },
-      // --- DeepSeek ---
       {
         id: "deepseek-v3-2-volc-ioa",
         name: "DeepSeek V3.2",
@@ -758,7 +801,6 @@ export function buildCodeBuddyProvider(): ProviderConfig {
         contextWindow: 96000,
         maxTokens: 32000,
       },
-      // --- MiniMax ---
       {
         id: "minimax-m2.5-ioa",
         name: "MiniMax M2.5",
@@ -768,7 +810,6 @@ export function buildCodeBuddyProvider(): ProviderConfig {
         contextWindow: 200000,
         maxTokens: 48000,
       },
-      // --- Kimi ---
       {
         id: "kimi-k2.5-ioa",
         name: "Kimi K2.5",
@@ -787,7 +828,6 @@ export function buildCodeBuddyProvider(): ProviderConfig {
         contextWindow: 164000,
         maxTokens: 32000,
       },
-      // --- GLM models ---
       {
         id: "glm-5.0-ioa",
         name: "GLM 5.0",
@@ -970,6 +1010,13 @@ export async function resolveImplicitProviders(params: {
     resolveApiKeyFromProfiles({ provider: "qianfan", store: authStore });
   if (qianfanKey) {
     providers.qianfan = { ...buildQianfanProvider(), apiKey: qianfanKey };
+  }
+
+  const nvidiaKey =
+    resolveEnvApiKeyVarName("nvidia") ??
+    resolveApiKeyFromProfiles({ provider: "nvidia", store: authStore });
+  if (nvidiaKey) {
+    providers.nvidia = { ...buildNvidiaProvider(), apiKey: nvidiaKey };
   }
 
   // CodeBuddy SDK communicates with local CLI process, no API key needed.
