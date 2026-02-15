@@ -99,12 +99,6 @@ type CodeBuddyMessage =
   | CodeBuddySystemMessage
   | CodeBuddyOtherMessage;
 
-// Message format for CodeBuddy SDK input (Anthropic-style)
-type CodeBuddyInputMessage = {
-  role: "user" | "assistant";
-  content: string | CodeBuddyContentBlock[];
-};
-
 // Query options for CodeBuddy SDK
 type CodeBuddyQueryOptions = {
   model?: string;
@@ -146,89 +140,6 @@ interface ContextMessage {
  */
 export function isCodeBuddyProvider(provider: string): boolean {
   return provider === "codebuddy";
-}
-
-/**
- * Convert context message to CodeBuddy input message format
- */
-function convertContextMessageToCodeBuddy(msg: ContextMessage): CodeBuddyInputMessage | null {
-  const role = msg.role as "user" | "assistant" | "system" | "tool";
-
-  // Skip system messages - they're handled separately
-  if (role === "system") {
-    return null;
-  }
-
-  // Skip tool messages - they're embedded in assistant messages as tool_result
-  if (role === "tool") {
-    return null;
-  }
-
-  const content = msg.content;
-
-  // Convert content to CodeBuddy format
-  if (typeof content === "string") {
-    return {
-      role: role,
-      content: content,
-    };
-  }
-
-  if (Array.isArray(content)) {
-    const blocks: CodeBuddyContentBlock[] = [];
-    for (const block of content) {
-      if (block.type === "text" && typeof block.text === "string") {
-        blocks.push({ type: "text", text: block.text });
-      } else if (block.type === "tool_use") {
-        blocks.push({
-          type: "tool_use",
-          id: block.id ?? "",
-          name: block.name ?? "",
-          input: (block.input ?? {}) as Record<string, unknown>,
-        });
-      } else if (block.type === "tool_result") {
-        const toolUseId = block.tool_use_id ?? block.id ?? "";
-        const blockContent = block.content;
-        const resultContent =
-          typeof blockContent === "string"
-            ? blockContent
-            : Array.isArray(blockContent)
-              ? (blockContent as Array<{ type: "text"; text: string }>)
-              : "";
-        blocks.push({
-          type: "tool_result",
-          tool_use_id: toolUseId,
-          content: resultContent,
-        });
-      }
-    }
-    return {
-      role: role,
-      content: blocks.length > 0 ? blocks : "",
-    };
-  }
-
-  return {
-    role: role,
-    content: "",
-  };
-}
-
-/**
- * Convert pi-ai Context to CodeBuddy messages array
- */
-function convertContextToCodeBuddyMessages(context: Context): CodeBuddyInputMessage[] {
-  const messages = context.messages as unknown as ContextMessage[];
-  const result: CodeBuddyInputMessage[] = [];
-
-  for (const msg of messages) {
-    const converted = convertContextMessageToCodeBuddy(msg);
-    if (converted) {
-      result.push(converted);
-    }
-  }
-
-  return result;
 }
 
 /**
