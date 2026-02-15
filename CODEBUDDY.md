@@ -3,6 +3,12 @@
 > 本项目是 [openclaw/openclaw](https://github.com/openclaw/openclaw) 的 fork，将 AI provider 替换为 CodeBuddy SDK（`@tencent-ai/agent-sdk`）。
 > 上游项目规范请同时阅读 `AGENTS.md`，其中包含构建/测试/提交/代码风格等通用约定。
 
+## 核心原则
+
+- **体验对齐**：保证用户体验尽可能与官方 openclaw 版本一致。
+- **最小改动**：只修复因 CodeBuddy SDK 适配导致的问题（如循环、记忆丢失）。上游原有的 bug 或不完善之处（如流异常结束时 done 事件兜底缺失、assistant 消息 usage 未提取等）不在本 fork 修复范围内，等待官方上游修复后同步合入。
+- **不引入额外复杂度**：不为 CodeBuddy 适配层添加上游没有的功能或优化，避免维护负担和合并冲突。
+
 ## Fork 概述
 
 - 上游仓库：https://github.com/openclaw/openclaw
@@ -52,6 +58,15 @@ CodeBuddy SDK（`@tencent-ai/agent-sdk`）的 `query()` 函数：
 - SDK 内部工具执行对 openclaw 不可见（不会显示在 openclaw 的工具调用 UI 中）
 - 闭包重建问题：无法使用 SDK 的 session 续接功能，因为 `createCodeBuddyStreamFn()` 每次调用都会被重新创建
 
+### 上游遗留问题（不修复，等官方同步）
+
+以下问题在 CodeBuddy 适配层初始实现（`dc74aab06`）中已存在，非本 fork 改动引入：
+
+- **流异常结束时 done 事件可能不推送**：如果 SDK 流终止但未发送 `result` 消息，下游可能无限等待
+- **assistant 消息的 usage 信息未提取**：代码中有 TODO 注释但未实现，可能导致 token 统计不准
+- **每次调用都重新 import SDK**：`resolvedQueryFn` 缓存在闭包内，闭包每次重建导致缓存失效
+- **模型列表硬编码**：`models-config.providers.ts` 中的 CodeBuddy 模型列表不会随 SDK 更新自动同步
+
 ## 测试
 
 适配层测试文件：`src/agents/codebuddy-stream-adapter.test.ts`（12 个测试用例）
@@ -64,3 +79,11 @@ CodeBuddy SDK（`@tencent-ai/agent-sdk`）的 `query()` 函数：
 - 单轮对话 prompt 直通
 - systemPrompt 传递
 - 错误处理
+
+## 开发提示
+
+- Gateway `--force` 模式会自动加载最新构建，不需要每次都重启 gateway
+- 会话日志路径：`~/.openclaw/agents/<agentId>/sessions/*.jsonl`
+- 提交代码使用 `scripts/committer "<msg>" <file...>`（自动 lint + format）
+- 版本号更新需先获得确认，不要自行修改
+- 改代码前先给方案，经确认后再动手
