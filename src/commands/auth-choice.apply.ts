@@ -14,6 +14,7 @@ import { applyAuthChoiceQwenPortal } from "./auth-choice.apply.qwen-portal.js";
 import { applyAuthChoiceVllm } from "./auth-choice.apply.vllm.js";
 import { applyAuthChoiceVolcengine } from "./auth-choice.apply.volcengine.js";
 import { applyAuthChoiceXAI } from "./auth-choice.apply.xai.js";
+import { applyAuthProfileConfig, setCodeBuddyProfile } from "./onboard-auth.js";
 import type { AuthChoice, OnboardOptions } from "./onboard-types.js";
 
 export type ApplyAuthChoiceParams = {
@@ -36,6 +37,19 @@ export async function applyAuthChoice(
   params: ApplyAuthChoiceParams,
 ): Promise<ApplyAuthChoiceResult> {
   const handlers: Array<(p: ApplyAuthChoiceParams) => Promise<ApplyAuthChoiceResult | null>> = [
+    // CodeBuddy uses local CLI, no auth needed — write profile marker and return
+    async (p) => {
+      if (p.authChoice !== "codebuddy") {
+        return null;
+      }
+      setCodeBuddyProfile(p.agentDir);
+      const config = applyAuthProfileConfig(p.config, {
+        profileId: "codebuddy:default",
+        provider: "codebuddy",
+        mode: "api_key",
+      });
+      return { config };
+    },
     applyAuthChoiceAnthropic,
     applyAuthChoiceVllm,
     applyAuthChoiceOpenAI,

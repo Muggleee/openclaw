@@ -11,6 +11,19 @@
   <strong>EXFOLIATE! EXFOLIATE!</strong>
 </p>
 
+## CodeBuddy 版本安装/更新
+
+```bash
+# 一键安装
+npm install -g openclaw@latest --registry=https://npm.cnb.cool/mugglezack/openclaw-cb/-/packages/
+
+# 更新到最新版
+npm i -g openclaw@latest --registry=https://npm.cnb.cool/mugglezack/openclaw-cb/-/packages/
+
+# 安装后运行 onboard 向导
+openclaw onboard --auth-choice codebuddy
+```
+
 <p align="center">
   <a href="https://github.com/openclaw/openclaw/actions/workflows/ci.yml?branch=main"><img src="https://img.shields.io/github/actions/workflow/status/openclaw/openclaw/ci.yml?branch=main&style=for-the-badge" alt="CI status"></a>
   <a href="https://github.com/openclaw/openclaw/releases"><img src="https://img.shields.io/github/v/release/openclaw/openclaw?include_prereleases&style=for-the-badge" alt="GitHub release"></a>

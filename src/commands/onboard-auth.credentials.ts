@@ -502,3 +502,15 @@ export async function setKilocodeApiKey(
     agentDir: resolveAuthAgentDir(agentDir),
   });
 }
+
+export function setCodeBuddyProfile(agentDir?: string) {
+  upsertAuthProfile({
+    profileId: "codebuddy:default",
+    credential: {
+      type: "api_key",
+      provider: "codebuddy",
+      key: "codebuddy-sdk-local",
+    },
+    agentDir: resolveAuthAgentDir(agentDir),
+  });
+}

@@ -49,6 +49,7 @@ export type AuthChoice =
   | "volcengine-api-key"
   | "byteplus-api-key"
   | "qianfan-api-key"
+  | "codebuddy"
   | "custom-api-key"
   | "skip";
 export type AuthChoiceGroupId =
@@ -75,6 +76,7 @@ export type AuthChoiceGroupId =
   | "together"
   | "huggingface"
   | "qianfan"
+  | "codebuddy"
   | "xai"
   | "volcengine"
   | "byteplus"

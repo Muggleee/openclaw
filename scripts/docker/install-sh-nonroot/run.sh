@@ -5,6 +5,11 @@ INSTALL_URL="${OPENCLAW_INSTALL_URL:-https://openclaw.bot/install.sh}"
 DEFAULT_PACKAGE="openclaw"
 PACKAGE_NAME="${OPENCLAW_INSTALL_PACKAGE:-$DEFAULT_PACKAGE}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+NPM_REGISTRY="${OPENCLAW_NPM_REGISTRY:-}"
+REGISTRY_FLAG=""
+if [[ -n "$NPM_REGISTRY" ]]; then
+  REGISTRY_FLAG="--registry=$NPM_REGISTRY"
+fi
 
 # shellcheck source=../install-sh-common/cli-verify.sh
 source "$SCRIPT_DIR/../install-sh-common/cli-verify.sh"
@@ -28,7 +33,7 @@ EXPECTED_VERSION="${OPENCLAW_INSTALL_EXPECT_VERSION:-}"
 if [[ -n "$EXPECTED_VERSION" ]]; then
   LATEST_VERSION="$EXPECTED_VERSION"
 else
-  LATEST_VERSION="$(npm view "$PACKAGE_NAME" version)"
+  LATEST_VERSION="$(npm view "$PACKAGE_NAME" version $REGISTRY_FLAG)"
 fi
 echo "==> Verify CLI installed"
 verify_installed_cli "$PACKAGE_NAME" "$LATEST_VERSION"

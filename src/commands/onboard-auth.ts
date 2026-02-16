@@ -84,6 +84,7 @@ export {
   setVolcengineApiKey,
   setZaiApiKey,
   setXaiApiKey,
+  setCodeBuddyProfile,
   writeOAuthCredentials,
   HUGGINGFACE_DEFAULT_MODEL_REF,
   VERCEL_AI_GATEWAY_DEFAULT_MODEL_REF,

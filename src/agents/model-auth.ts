@@ -141,6 +141,17 @@ export async function resolveApiKeyForProvider(params: {
   agentDir?: string;
 }): Promise<ResolvedProviderAuth> {
   const { provider, cfg, profileId, preferredProfile } = params;
+
+  // CodeBuddy SDK communicates with local CLI process, no API key needed
+  const normalized = normalizeProviderId(provider);
+  if (normalized === "codebuddy") {
+    return {
+      apiKey: "codebuddy-sdk-local",
+      source: "codebuddy-sdk-local",
+      mode: "api-key",
+    };
+  }
+
   const store = params.store ?? ensureAuthProfileStore(params.agentDir);
 
   if (profileId) {
@@ -207,7 +218,6 @@ export async function resolveApiKeyForProvider(params: {
     return { apiKey: customKey, source: "models.json", mode: "api-key" };
   }
 
-  const normalized = normalizeProviderId(provider);
   if (authOverride === undefined && normalized === "amazon-bedrock") {
     return resolveAwsSdkAuthInfo();
   }

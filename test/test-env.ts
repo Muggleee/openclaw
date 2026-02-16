@@ -55,7 +55,8 @@ export function installTestEnv(): { cleanup: () => void; tempHome: string } {
   const live =
     process.env.LIVE === "1" ||
     process.env.OPENCLAW_LIVE_TEST === "1" ||
-    process.env.OPENCLAW_LIVE_GATEWAY === "1";
+    process.env.OPENCLAW_LIVE_GATEWAY === "1" ||
+    process.env.CODEBUDDY_LIVE_TEST === "1";
 
   // Live tests must use the real user environment (keys, profiles, config).
   // The default test env isolates HOME to avoid touching real state.

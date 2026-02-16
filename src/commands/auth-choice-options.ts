@@ -180,6 +180,12 @@ const AUTH_CHOICE_GROUP_DEFS: {
     choices: ["cloudflare-ai-gateway-api-key"],
   },
   {
+    value: "codebuddy",
+    label: "CodeBuddy",
+    hint: "Local CLI — no API key needed",
+    choices: ["codebuddy"],
+  },
+  {
     value: "custom",
     label: "Custom Provider",
     hint: "Any OpenAI or Anthropic compatible endpoint",
@@ -297,6 +303,7 @@ const BASE_AUTH_CHOICE_OPTIONS: ReadonlyArray<AuthChoiceOption> = [
     label: "MiniMax M2.5 Highspeed",
     hint: "Official fast tier (legacy: Lightning)",
   },
+  { value: "codebuddy", label: "CodeBuddy (local CLI)", hint: "No API key needed" },
   { value: "custom-api-key", label: "Custom Provider" },
 ];
 
