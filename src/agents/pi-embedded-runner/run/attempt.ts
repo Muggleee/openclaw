@@ -31,6 +31,7 @@ import {
   listChannelSupportedActions,
   resolveChannelMessageToolHints,
 } from "../../channel-tools.js";
+import { createCodeBuddyStreamFn, isCodeBuddyProvider } from "../../codebuddy-stream-adapter.js";
 import { resolveOpenClawDocsPath } from "../../docs-path.js";
 import { isTimeoutError } from "../../failover-error.js";
 import { resolveModelAuthMode } from "../../model-auth.js";
@@ -596,9 +597,13 @@ export async function runEmbeddedAttempt(
         workspaceDir: params.workspaceDir,
       });
 
-      // Ollama native API: bypass SDK's streamSimple and use direct /api/chat calls
-      // for reliable streaming + tool calling support (#11828).
-      if (params.model.api === "ollama") {
+      // For CodeBuddy provider, use the custom adapter that wraps the CodeBuddy SDK.
+      if (isCodeBuddyProvider(params.provider)) {
+        // CodeBuddy SDK communicates with local CLI process, no API key needed
+        activeSession.agent.streamFn = createCodeBuddyStreamFn();
+      } else if (params.model.api === "ollama") {
+        // Ollama native API: bypass SDK's streamSimple and use direct /api/chat calls
+        // for reliable streaming + tool calling support (#11828).
         // Use the resolved model baseUrl first so custom provider aliases work.
         const providerConfig = params.config?.models?.providers?.[params.model.provider];
         const modelBaseUrl =

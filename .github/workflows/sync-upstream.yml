@@ -1,0 +1,314 @@
+name: Sync Upstream & Publish
+
+# 每天 UTC 8:00（北京时间 16:00）自动检测上游新版本
+# 也可通过 Actions 页面手动触发
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: https://github.com/openclaw/openclaw.git
+  CNB_REGISTRY: https://npm.cnb.cool/mugglezack/openclaw-cb/-/packages/
+  NODE_VERSION: "22"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Check upstream version
+        id: check
+        run: |
+          set -euo pipefail
+
+          # 获取官方最新版本（从 npm 公共 registry）
+          UPSTREAM_VER="$(npm view openclaw version --registry=https://registry.npmjs.org/)"
+          echo "upstream_version=${UPSTREAM_VER}" >> "$GITHUB_OUTPUT"
+
+          # 获取本地基准版本（去掉 -codebuddy.N 后缀）
+          LOCAL_VER="$(node -p "require('./package.json').version")"
+          BASE_VER="$(echo "${LOCAL_VER}" | sed 's/-codebuddy\..*//')"
+          echo "local_version=${LOCAL_VER}" >> "$GITHUB_OUTPUT"
+          echo "base_version=${BASE_VER}" >> "$GITHUB_OUTPUT"
+
+          echo "上游版本: ${UPSTREAM_VER}"
+          echo "本地版本: ${LOCAL_VER} (基准: ${BASE_VER})"
+
+          if [ "${UPSTREAM_VER}" = "${BASE_VER}" ]; then
+            echo "已是最新版本，无需同步。"
+            echo "needs_sync=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "检测到新版本，开始同步。"
+            echo "needs_sync=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Merge upstream
+        if: steps.check.outputs.needs_sync == 'true'
+        id: merge
+        run: |
+          set -euo pipefail
+
+          UPSTREAM_VER="${{ steps.check.outputs.upstream_version }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git remote add upstream "${{ env.UPSTREAM_REPO }}" || true
+          git fetch upstream --tags
+
+          # 尝试通过 tag 合并，如果 tag 不存在则用 main 分支
+          TAG="v${UPSTREAM_VER}"
+          if git rev-parse "upstream/tags/${TAG}" &>/dev/null; then
+            MERGE_REF="${TAG}"
+          elif git tag -l "${TAG}" | grep -q "${TAG}"; then
+            MERGE_REF="${TAG}"
+          else
+            echo "Tag ${TAG} 不存在，使用 upstream/main"
+            MERGE_REF="upstream/main"
+          fi
+
+          echo "合并目标: ${MERGE_REF}"
+
+          if git merge "${MERGE_REF}" --no-edit; then
+            echo "merge_success=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "检测到冲突，尝试自动解决..."
+
+            # 获取冲突文件列表
+            CONFLICTED="$(git diff --name-only --diff-filter=U)"
+            echo "冲突文件: ${CONFLICTED}"
+
+            # 检查是否只有可自动解决的文件冲突
+            UNEXPECTED=""
+            for f in ${CONFLICTED}; do
+              case "${f}" in
+                package.json|pnpm-lock.yaml|.npmrc|.github/workflows/*)
+                  echo "可自动解决: ${f}"
+                  ;;
+                src/agents/pi-embedded-runner/run/attempt.ts| \
+                src/agents/codebuddy-stream-adapter.ts| \
+                src/agents/codebuddy.ts| \
+                src/agents/models-config.providers.ts| \
+                src/agents/model-auth.ts| \
+                src/commands/auth-choice-options.ts| \
+                src/commands/auth-choice.apply.ts| \
+                src/commands/auth-choice.preferred-provider.ts| \
+                src/commands/onboard-auth.ts| \
+                src/commands/onboard-auth.credentials.ts| \
+                src/commands/onboard-types.ts)
+                  echo "可自动解决 (fork 源文件): ${f}"
+                  ;;
+                *)
+                  UNEXPECTED="${UNEXPECTED} ${f}"
+                  ;;
+              esac
+            done
+
+            if [ -n "${UNEXPECTED}" ]; then
+              echo "::error::以下文件存在无法自动解决的冲突:${UNEXPECTED}"
+              git merge --abort
+              echo "merge_success=false" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+
+            # package.json: 接受上游版本，稍后会覆写 name/version/publishConfig
+            if echo "${CONFLICTED}" | grep -q "^package.json$"; then
+              git checkout --theirs package.json
+              git add package.json
+            fi
+
+            # pnpm-lock.yaml: 接受上游版本，稍后 pnpm install 会重新生成
+            if echo "${CONFLICTED}" | grep -q "^pnpm-lock.yaml$"; then
+              git checkout --theirs pnpm-lock.yaml
+              git add pnpm-lock.yaml
+            fi
+
+            # .npmrc: 保留 fork 版本（包含 CNB registry 配置）
+            if echo "${CONFLICTED}" | grep -q "^\.npmrc$"; then
+              git checkout --ours .npmrc
+              git add .npmrc
+            fi
+
+            # .github/workflows/*: 保留 fork 版本（已禁用/已适配的 workflows）
+            # src/*: fork 定制的源文件，保留 fork 版本
+            for f in ${CONFLICTED}; do
+              if [[ "${f}" == .github/workflows/* ]] || [[ "${f}" == src/* ]]; then
+                git checkout --ours "${f}"
+                git add "${f}"
+              fi
+            done
+
+            # 完成合并
+            git -c core.editor=true merge --continue
+            echo "冲突已自动解决"
+            echo "merge_success=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update version
+        if: steps.check.outputs.needs_sync == 'true' && steps.merge.outputs.merge_success == 'true'
+        run: |
+          set -euo pipefail
+
+          UPSTREAM_VER="${{ steps.check.outputs.upstream_version }}"
+          NEW_VER="${UPSTREAM_VER}-codebuddy.1"
+
+          # 更新 package.json: 恢复 fork 的 name/publishConfig/依赖 + 设置新版本号
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.name = 'openclaw';
+            pkg.version = '${NEW_VER}';
+            pkg.publishConfig = {
+              registry: '${{ env.CNB_REGISTRY }}'
+            };
+            if (!pkg.dependencies['@tencent-ai/agent-sdk']) {
+              pkg.dependencies['@tencent-ai/agent-sdk'] = '^0.3.57';
+            }
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+
+          # 确保 onboard-types.ts 包含 codebuddy AuthChoiceGroupId
+          node -e '
+            const fs = require("fs");
+            const file = "src/commands/onboard-types.ts";
+            let content = fs.readFileSync(file, "utf8");
+            if (!content.includes("codebuddy")) {
+              content = content.replace(
+                /(\| "xai")/,
+                "| \"codebuddy\"\n  $1"
+              );
+              fs.writeFileSync(file, content);
+              console.log("Added codebuddy to AuthChoiceGroupId");
+            }
+          '
+
+          # 确保 register.onboard.ts 的 --auth-choice 没有默认值参数（第三个参数）
+          # 上游用 formatAuthChoiceChoicesForCli() 只有两个参数，不会有这个问题
+          # 但如果合并产生了三参数形式，需要修正
+          node -e '
+            const fs = require("fs");
+            const file = "src/cli/program/register.onboard.ts";
+            let content = fs.readFileSync(file, "utf8");
+            // 匹配 .option("--auth-choice <choice>", "描述", "默认值") 三参数形式
+            // 删除第三个参数，只保留前两个
+            const threeArgPattern = /(\.option\(\s*"--auth-choice <choice>",\s*(?:`[^`]*`|"[^"]*"))\s*,\s*(?:`[^`]*`|"[^"]*")\s*(\))/;
+            if (threeArgPattern.test(content)) {
+              content = content.replace(threeArgPattern, "$1$2");
+              fs.writeFileSync(file, content);
+              console.log("Fixed --auth-choice: removed default value parameter");
+            }
+          '
+
+          # 确保 README.md 顶部包含 CodeBuddy 安装/更新说明
+          node -e '
+            const fs = require("fs");
+            const file = "README.md";
+            let content = fs.readFileSync(file, "utf8");
+            const marker = "## CodeBuddy 版本安装/更新";
+            if (!content.includes(marker)) {
+              const block = [
+                "",
+                "## CodeBuddy 版本安装/更新",
+                "",
+                "```bash",
+                "# 一键安装",
+                "npm install -g openclaw@latest --registry=https://npm.cnb.cool/mugglezack/openclaw-cb/-/packages/",
+                "",
+                "# 更新到最新版",
+                "npm i -g openclaw@latest --registry=https://npm.cnb.cool/mugglezack/openclaw-cb/-/packages/",
+                "",
+                "# 安装后运行 onboard 向导",
+                "openclaw onboard --auth-choice codebuddy",
+                "```",
+                "",
+              ].join("\n");
+              // 插入到 EXFOLIATE 行之后
+              const anchor = "</p>\n\n<p align=\"center\">";
+              const idx = content.indexOf(anchor);
+              if (idx !== -1) {
+                const insertAt = idx + "</p>".length;
+                content = content.slice(0, insertAt) + "\n" + block + content.slice(insertAt);
+              } else {
+                // fallback: 插入到第一个 ## 之前
+                const firstH2 = content.indexOf("\n## ");
+                if (firstH2 !== -1) {
+                  content = content.slice(0, firstH2) + "\n" + block + content.slice(firstH2);
+                }
+              }
+              fs.writeFileSync(file, content);
+              console.log("Injected CodeBuddy install section into README.md");
+            }
+          '
+
+          echo "版本号已更新为: ${NEW_VER}"
+
+      - name: Install dependencies
+        if: steps.check.outputs.needs_sync == 'true' && steps.merge.outputs.merge_success == 'true'
+        run: pnpm install --frozen-lockfile || pnpm install
+
+      - name: Build
+        if: steps.check.outputs.needs_sync == 'true' && steps.merge.outputs.merge_success == 'true'
+        run: pnpm build
+
+      - name: Test
+        if: steps.check.outputs.needs_sync == 'true' && steps.merge.outputs.merge_success == 'true'
+        run: pnpm test
+        continue-on-error: true
+
+      - name: Publish to CNB
+        if: steps.check.outputs.needs_sync == 'true' && steps.merge.outputs.merge_success == 'true'
+        env:
+          CNB_NPM_TOKEN: ${{ secrets.CNB_NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # 配置认证
+          echo "//npm.cnb.cool/mugglezack/openclaw-cb/-/packages/:_authToken=${CNB_NPM_TOKEN}" >> ~/.npmrc
+
+          # 发布（prerelease 版本需要 --tag latest）
+          npm publish --registry="${{ env.CNB_REGISTRY }}" --tag latest
+
+          NEW_VER="$(node -p "require('./package.json').version")"
+          echo "已发布: openclaw@${NEW_VER}"
+
+      - name: Commit & tag
+        if: steps.check.outputs.needs_sync == 'true' && steps.merge.outputs.merge_success == 'true'
+        run: |
+          set -euo pipefail
+
+          NEW_VER="$(node -p "require('./package.json').version")"
+
+          git add -A
+          git commit -m "chore: sync upstream v${{ steps.check.outputs.upstream_version }} → ${NEW_VER}" || true
+          git tag "v${NEW_VER}"
+          git push origin HEAD --tags
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## 同步结果" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 上游版本: \`${{ steps.check.outputs.upstream_version }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 本地基准: \`${{ steps.check.outputs.base_version }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 需要同步: \`${{ steps.check.outputs.needs_sync }}\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.check.outputs.needs_sync }}" = "true" ]; then
+            echo "- 合并状态: \`${{ steps.merge.outputs.merge_success || 'N/A' }}\`" >> "$GITHUB_STEP_SUMMARY"
+          fi

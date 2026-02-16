@@ -20,6 +20,7 @@ permissions: {}
 
 jobs:
   label:
+    if: false # disabled: requires GH_APP_PRIVATE_KEY
     permissions:
       contents: read
       pull-requests: write
@@ -438,6 +439,7 @@ jobs:
             core.info(`Processed ${processed} pull requests.`);
 
   label-issues:
+    if: false # disabled: requires GH_APP_PRIVATE_KEY
     permissions:
       issues: write
     runs-on: ubuntu-latest
