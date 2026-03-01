@@ -62,7 +62,8 @@ describe("createCodeBuddyStreamFn", () => {
     };
 
     const events: unknown[] = [];
-    for await (const event of streamFn(model as never, context as never)) {
+    const stream = await streamFn(model as never, context as never);
+    for await (const event of stream) {
       events.push(event);
     }
 
@@ -116,7 +117,8 @@ describe("createCodeBuddyStreamFn", () => {
     };
 
     const events: unknown[] = [];
-    for await (const event of streamFn(model as never, context as never)) {
+    const stream = await streamFn(model as never, context as never);
+    for await (const event of stream) {
       events.push(event);
     }
 
@@ -164,7 +166,8 @@ describe("createCodeBuddyStreamFn", () => {
     };
 
     const events: unknown[] = [];
-    for await (const event of streamFn(model as never, context as never)) {
+    const stream = await streamFn(model as never, context as never);
+    for await (const event of stream) {
       events.push(event);
     }
 
@@ -210,7 +213,8 @@ describe("createCodeBuddyStreamFn", () => {
       ],
     };
 
-    for await (const _ of streamFn(model as never, context as never)) {
+    const resolvedStream = await streamFn(model as never, context as never);
+    for await (const _ of resolvedStream) {
       // consume
     }
 
@@ -257,7 +261,8 @@ describe("createCodeBuddyStreamFn", () => {
       messages: [{ role: "user", content: "Hello" }],
     };
 
-    for await (const _ of streamFn(model as never, context as never)) {
+    const resolvedStream = await streamFn(model as never, context as never);
+    for await (const _ of resolvedStream) {
       // consume
     }
 
@@ -288,7 +293,8 @@ describe("createCodeBuddyStreamFn", () => {
       messages: [{ role: "user", content: "Hello" }],
     };
 
-    for await (const _ of streamFn(model as never, context as never)) {
+    const resolvedStream = await streamFn(model as never, context as never);
+    for await (const _ of resolvedStream) {
       // consume
     }
 
@@ -327,7 +333,8 @@ describe("createCodeBuddyStreamFn", () => {
     };
 
     const events: unknown[] = [];
-    for await (const event of streamFn(model as never, context as never)) {
+    const stream = await streamFn(model as never, context as never);
+    for await (const event of stream) {
       events.push(event);
     }
 
@@ -376,7 +383,8 @@ describe("createCodeBuddyStreamFn", () => {
     };
 
     const events: unknown[] = [];
-    for await (const event of streamFn(model as never, context as never)) {
+    const stream = await streamFn(model as never, context as never);
+    for await (const event of stream) {
       events.push(event);
     }
 
@@ -412,7 +420,8 @@ describe("createCodeBuddyStreamFn", () => {
       maxTokens: 2048,
     };
 
-    for await (const _ of streamFn(model as never, context as never, options)) {
+    const resolvedStreamWithOpts = await streamFn(model as never, context as never, options);
+    for await (const _ of resolvedStreamWithOpts) {
       // consume
     }
 

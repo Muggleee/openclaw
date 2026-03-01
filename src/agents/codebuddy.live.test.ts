@@ -28,11 +28,12 @@ function buildContext(prompt: string): Context {
 
 /** Collect all events from a CodeBuddy stream and detect auth failures. */
 async function collectEvents(
-  eventStream: AsyncIterable<AssistantMessageEvent>,
+  eventStream: AsyncIterable<AssistantMessageEvent> | Promise<AsyncIterable<AssistantMessageEvent>>,
 ): Promise<{ events: AssistantMessageEvent[]; text: string }> {
+  const resolvedStream = await eventStream;
   const events: AssistantMessageEvent[] = [];
   let text = "";
-  for await (const event of eventStream) {
+  for await (const event of resolvedStream) {
     events.push(event);
     if (event.type === "text_delta") {
       text += event.delta;
@@ -41,7 +42,7 @@ async function collectEvents(
       const errText =
         event.error?.content
           ?.filter((b: { type: string }) => b.type === "text")
-          .map((b: { text: string }) => b.text)
+          .map((b: { type: string; text?: string }) => b.text ?? "")
           .join("") ?? "";
       if (errText.includes("Authentication required")) {
         throw new Error("CodeBuddy CLI not authenticated — run `codebuddy /login` first");
