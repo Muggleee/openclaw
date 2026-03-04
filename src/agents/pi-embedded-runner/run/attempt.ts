@@ -981,8 +981,12 @@ export async function runEmbeddedAttempt(
 
       // For CodeBuddy provider, use the custom adapter that wraps the CodeBuddy SDK.
       if (isCodeBuddyProvider(params.provider)) {
-        // CodeBuddy SDK communicates with local CLI process, no API key needed
-        activeSession.agent.streamFn = createCodeBuddyStreamFn();
+        // CodeBuddy SDK communicates with local CLI process, no API key needed.
+        // Pass sessionId so the SDK can persist/resume conversation history natively,
+        // avoiding the need to serialize full history into each prompt.
+        activeSession.agent.streamFn = createCodeBuddyStreamFn({
+          sessionId: params.sessionId,
+        });
       } else if (params.model.api === "ollama") {
         // Ollama native API: bypass SDK's streamSimple and use direct /api/chat calls
         // for reliable streaming + tool calling support (#11828).
