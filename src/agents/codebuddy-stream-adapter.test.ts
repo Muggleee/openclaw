@@ -37,6 +37,13 @@ describe("createCodeBuddyStreamFn", () => {
     };
   }
 
+  const defaultModel = {
+    id: "claude-opus-4.6",
+    provider: "codebuddy",
+    api: "anthropic-messages",
+    maxTokens: 8192,
+  };
+
   it("yields text events from assistant messages", async () => {
     const mockQueryFn: CodeBuddyQueryFn = vi.fn().mockImplementation(async function* () {
       yield assistantMsg([{ type: "text", text: "Hello, world!" }]);
@@ -51,18 +58,12 @@ describe("createCodeBuddyStreamFn", () => {
       queryFn: mockQueryFn,
     });
 
-    const model = {
-      id: "claude-opus-4.6",
-      provider: "codebuddy",
-      api: "anthropic-messages",
-      maxTokens: 8192,
-    };
     const context = {
       messages: [{ role: "user", content: "Hello" }],
     };
 
     const events: unknown[] = [];
-    const stream = await streamFn(model as never, context as never);
+    const stream = await streamFn(defaultModel as never, context as never);
     for await (const event of stream) {
       events.push(event);
     }
@@ -106,18 +107,12 @@ describe("createCodeBuddyStreamFn", () => {
       queryFn: mockQueryFn,
     });
 
-    const model = {
-      id: "claude-opus-4.6",
-      provider: "codebuddy",
-      api: "anthropic-messages",
-      maxTokens: 8192,
-    };
     const context = {
       messages: [{ role: "user", content: "Read test.txt" }],
     };
 
     const events: unknown[] = [];
-    const stream = await streamFn(model as never, context as never);
+    const stream = await streamFn(defaultModel as never, context as never);
     for await (const event of stream) {
       events.push(event);
     }
@@ -155,18 +150,12 @@ describe("createCodeBuddyStreamFn", () => {
       queryFn: mockQueryFn,
     });
 
-    const model = {
-      id: "claude-opus-4.6",
-      provider: "codebuddy",
-      api: "anthropic-messages",
-      maxTokens: 8192,
-    };
     const context = {
       messages: [{ role: "user", content: "Read data.json" }],
     };
 
     const events: unknown[] = [];
-    const stream = await streamFn(model as never, context as never);
+    const stream = await streamFn(defaultModel as never, context as never);
     for await (const event of stream) {
       events.push(event);
     }
@@ -189,22 +178,17 @@ describe("createCodeBuddyStreamFn", () => {
     expect(doneEvent?.reason).toBe("stop");
   });
 
-  it("includes conversation history in prompt for multi-turn conversations", async () => {
+  it("includes conversation history in prompt for multi-turn without sessionId (fallback mode)", async () => {
     const mockQueryFn: CodeBuddyQueryFn = vi.fn().mockImplementation(async function* () {
       yield assistantMsg([{ type: "text", text: "You asked about math." }]);
       yield { type: "result" };
     });
 
+    // No sessionId — should use legacy history-in-prompt mode
     const streamFn = createCodeBuddyStreamFn({
       queryFn: mockQueryFn,
     });
 
-    const model = {
-      id: "claude-opus-4.6",
-      provider: "codebuddy",
-      api: "anthropic-messages",
-      maxTokens: 8192,
-    };
     const context = {
       messages: [
         { role: "user", content: "What is 1+1?" },
@@ -213,7 +197,7 @@ describe("createCodeBuddyStreamFn", () => {
       ],
     };
 
-    const resolvedStream = await streamFn(model as never, context as never);
+    const resolvedStream = await streamFn(defaultModel as never, context as never);
     for await (const _ of resolvedStream) {
       // consume
     }
@@ -239,6 +223,9 @@ describe("createCodeBuddyStreamFn", () => {
 
     // Should NOT pass messages parameter to SDK
     expect(callArgs.messages).toBeUndefined();
+
+    // No sessionId in options
+    expect(callArgs.options.sessionId).toBeUndefined();
   });
 
   it("sends plain prompt without history tags for single-turn conversations", async () => {
@@ -251,17 +238,11 @@ describe("createCodeBuddyStreamFn", () => {
       queryFn: mockQueryFn,
     });
 
-    const model = {
-      id: "claude-opus-4.6",
-      provider: "codebuddy",
-      api: "anthropic-messages",
-      maxTokens: 8192,
-    };
     const context = {
       messages: [{ role: "user", content: "Hello" }],
     };
 
-    const resolvedStream = await streamFn(model as never, context as never);
+    const resolvedStream = await streamFn(defaultModel as never, context as never);
     for await (const _ of resolvedStream) {
       // consume
     }
@@ -282,18 +263,12 @@ describe("createCodeBuddyStreamFn", () => {
       queryFn: mockQueryFn,
     });
 
-    const model = {
-      id: "claude-opus-4.6",
-      provider: "codebuddy",
-      api: "anthropic-messages",
-      maxTokens: 8192,
-    };
     const context = {
       systemPrompt: "You are a helpful assistant.",
       messages: [{ role: "user", content: "Hello" }],
     };
 
-    const resolvedStream = await streamFn(model as never, context as never);
+    const resolvedStream = await streamFn(defaultModel as never, context as never);
     for await (const _ of resolvedStream) {
       // consume
     }
@@ -322,18 +297,12 @@ describe("createCodeBuddyStreamFn", () => {
       queryFn: mockQueryFn,
     });
 
-    const model = {
-      id: "claude-opus-4.6",
-      provider: "codebuddy",
-      api: "anthropic-messages",
-      maxTokens: 8192,
-    };
     const context = {
       messages: [{ role: "user", content: "Hello" }],
     };
 
     const events: unknown[] = [];
-    const stream = await streamFn(model as never, context as never);
+    const stream = await streamFn(defaultModel as never, context as never);
     for await (const event of stream) {
       events.push(event);
     }
@@ -372,18 +341,12 @@ describe("createCodeBuddyStreamFn", () => {
       queryFn: mockQueryFn,
     });
 
-    const model = {
-      id: "claude-opus-4.6",
-      provider: "codebuddy",
-      api: "anthropic-messages",
-      maxTokens: 8192,
-    };
     const context = {
       messages: [{ role: "user", content: "Hi" }],
     };
 
     const events: unknown[] = [];
-    const stream = await streamFn(model as never, context as never);
+    const stream = await streamFn(defaultModel as never, context as never);
     for await (const event of stream) {
       events.push(event);
     }
@@ -437,5 +400,189 @@ describe("createCodeBuddyStreamFn", () => {
   it("dynamically imports SDK when no queryFn provided", async () => {
     const streamFn = createCodeBuddyStreamFn();
     expect(typeof streamFn).toBe("function");
+  });
+});
+
+describe("createCodeBuddyStreamFn (session management)", () => {
+  function assistantMsg(content: unknown[]) {
+    return {
+      type: "assistant",
+      uuid: "test-uuid",
+      session_id: "test-session",
+      message: {
+        id: "test-msg-id",
+        content,
+        model: "claude-opus-4.6",
+        role: "assistant",
+        stop_reason: null,
+        type: "message",
+        usage: { input_tokens: 0, output_tokens: 0 },
+      },
+    };
+  }
+
+  const defaultModel = {
+    id: "claude-opus-4.6",
+    provider: "codebuddy",
+    api: "anthropic-messages",
+    maxTokens: 8192,
+  };
+
+  it("passes sessionId to SDK query options when provided", async () => {
+    const mockQueryFn: CodeBuddyQueryFn = vi.fn().mockImplementation(async function* () {
+      yield assistantMsg([{ type: "text", text: "Response" }]);
+      yield { type: "result" };
+    });
+
+    const streamFn = createCodeBuddyStreamFn({
+      queryFn: mockQueryFn,
+      sessionId: "openclaw-session-abc-123",
+    });
+
+    const context = {
+      messages: [{ role: "user", content: "Hello" }],
+    };
+
+    const stream = await streamFn(defaultModel as never, context as never);
+    for await (const _ of stream) {
+      // consume
+    }
+
+    expect(mockQueryFn).toHaveBeenCalledOnce();
+    const callArgs = (mockQueryFn as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(callArgs.options.sessionId).toBe("openclaw-session-abc-123");
+  });
+
+  it("sends only current prompt (no history) when sessionId is provided", async () => {
+    const mockQueryFn: CodeBuddyQueryFn = vi.fn().mockImplementation(async function* () {
+      yield assistantMsg([{ type: "text", text: "Follow-up response" }]);
+      yield { type: "result" };
+    });
+
+    const streamFn = createCodeBuddyStreamFn({
+      queryFn: mockQueryFn,
+      sessionId: "session-with-history",
+    });
+
+    const context = {
+      messages: [
+        { role: "user", content: "What is 1+1?" },
+        { role: "assistant", content: [{ type: "text", text: "1+1 equals 2!" }] },
+        { role: "user", content: "What did I just ask?" },
+      ],
+    };
+
+    const stream = await streamFn(defaultModel as never, context as never);
+    for await (const _ of stream) {
+      // consume
+    }
+
+    expect(mockQueryFn).toHaveBeenCalledOnce();
+    const callArgs = (mockQueryFn as ReturnType<typeof vi.fn>).mock.calls[0][0];
+
+    // With sessionId, SDK manages history — prompt should be current message only
+    expect(callArgs.prompt).toBe("What did I just ask?");
+    expect(callArgs.prompt).not.toContain("<conversation_history>");
+    expect(callArgs.prompt).not.toContain("What is 1+1?");
+
+    // sessionId should be passed
+    expect(callArgs.options.sessionId).toBe("session-with-history");
+  });
+
+  it("falls back to history-in-prompt when no sessionId is provided", async () => {
+    const mockQueryFn: CodeBuddyQueryFn = vi.fn().mockImplementation(async function* () {
+      yield assistantMsg([{ type: "text", text: "Response" }]);
+      yield { type: "result" };
+    });
+
+    // No sessionId — legacy fallback mode
+    const streamFn = createCodeBuddyStreamFn({
+      queryFn: mockQueryFn,
+    });
+
+    const context = {
+      messages: [
+        { role: "user", content: "First question" },
+        { role: "assistant", content: "First answer" },
+        { role: "user", content: "Follow-up question" },
+      ],
+    };
+
+    const stream = await streamFn(defaultModel as never, context as never);
+    for await (const _ of stream) {
+      // consume
+    }
+
+    const callArgs = (mockQueryFn as ReturnType<typeof vi.fn>).mock.calls[0][0];
+
+    // Without sessionId, should serialize history into prompt
+    expect(callArgs.prompt).toContain("<conversation_history>");
+    expect(callArgs.prompt).toContain("First question");
+    expect(callArgs.prompt).toContain("First answer");
+    expect(callArgs.prompt).toContain("<current_message>");
+    expect(callArgs.prompt).toContain("Follow-up question");
+
+    // No sessionId in options
+    expect(callArgs.options.sessionId).toBeUndefined();
+  });
+
+  it("does not include sessionId in options when not provided", async () => {
+    const mockQueryFn: CodeBuddyQueryFn = vi.fn().mockImplementation(async function* () {
+      yield assistantMsg([{ type: "text", text: "Response" }]);
+      yield { type: "result" };
+    });
+
+    const streamFn = createCodeBuddyStreamFn({
+      queryFn: mockQueryFn,
+      // no sessionId
+    });
+
+    const context = {
+      messages: [{ role: "user", content: "Hello" }],
+    };
+
+    const stream = await streamFn(defaultModel as never, context as never);
+    for await (const _ of stream) {
+      // consume
+    }
+
+    const callArgs = (mockQueryFn as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    // sessionId should not be present in options at all
+    expect(callArgs.options).not.toHaveProperty("sessionId");
+  });
+
+  it("preserves sessionId across multiple calls within the same StreamFn closure", async () => {
+    let callCount = 0;
+    const mockQueryFn: CodeBuddyQueryFn = vi.fn().mockImplementation(async function* () {
+      callCount++;
+      yield assistantMsg([{ type: "text", text: `Response ${callCount}` }]);
+      yield { type: "result" };
+    });
+
+    const streamFn = createCodeBuddyStreamFn({
+      queryFn: mockQueryFn,
+      sessionId: "persistent-session-id",
+    });
+
+    // First call
+    const context1 = { messages: [{ role: "user", content: "First" }] };
+    const stream1 = await streamFn(defaultModel as never, context1 as never);
+    for await (const _ of stream1) {
+      // consume
+    }
+
+    // Second call (same closure, simulating agentic loop continuation)
+    const context2 = { messages: [{ role: "user", content: "Second" }] };
+    const stream2 = await streamFn(defaultModel as never, context2 as never);
+    for await (const _ of stream2) {
+      // consume
+    }
+
+    expect(mockQueryFn).toHaveBeenCalledTimes(2);
+
+    // Both calls should use the same sessionId
+    const calls = (mockQueryFn as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls[0][0].options.sessionId).toBe("persistent-session-id");
+    expect(calls[1][0].options.sessionId).toBe("persistent-session-id");
   });
 });

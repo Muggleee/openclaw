@@ -4,6 +4,14 @@
  * Adapts CodeBuddy Agent SDK's query() function to work with pi-ai's StreamFn interface.
  * This allows OpenClaw to use CodeBuddy SDK as a provider while maintaining compatibility
  * with the existing session management, tool execution, and compaction infrastructure.
+ *
+ * Session management: When a sessionId is provided, the adapter uses the SDK's native
+ * session continuation (via `options.sessionId`). The SDK CLI process persists session
+ * history to disk, so subsequent queries with the same sessionId automatically have
+ * access to prior conversation context — no need to serialize history into the prompt.
+ *
+ * When no sessionId is provided, falls back to the legacy behavior of serializing
+ * conversation history into the prompt text.
  */
 
 import type { StreamFn } from "@mariozechner/pi-agent-core";
@@ -106,11 +114,14 @@ type CodeBuddyQueryOptions = {
   systemPrompt?: string;
   maxTokens?: number;
   temperature?: number;
+  sessionId?: string;
+  resume?: string;
 };
 
 // Query function type (to be imported from SDK)
 // Note: SDK's query() only uses prompt + options. It does NOT accept a messages parameter.
-// Conversation history is passed by serializing it into the prompt text.
+// With sessionId/resume, the SDK CLI process maintains conversation history on disk,
+// so history does not need to be serialized into the prompt.
 export type CodeBuddyQueryFn = (params: {
   prompt: string;
   options?: CodeBuddyQueryOptions;
@@ -179,6 +190,7 @@ function extractPromptFromContext(context: Context): string {
 
 /**
  * Build the prompt with conversation history prepended.
+ * Used as a fallback when no sessionId is provided (legacy mode).
  *
  * Serializes prior messages (everything except the last user message) into
  * Anthropic Messages API JSON format wrapped in XML tags, so the model
@@ -285,6 +297,22 @@ function createPartialMessage(
   };
 }
 
+// Module-level flag: triggers CLI prewarming once after first successful SDK import.
+let prewarmTriggered = false;
+
+/**
+ * Prewarm CodeBuddy CLI process pool.
+ * Call at app startup or lazily after first SDK import to reduce query latency.
+ */
+export async function prewarmCodeBuddyCLI(count = 2): Promise<void> {
+  try {
+    const { connectCLI } = await import("@tencent-ai/agent-sdk");
+    await Promise.all(Array.from({ length: count }, () => connectCLI()));
+  } catch {
+    // SDK not installed or prewarming failed — non-fatal, queries still work
+  }
+}
+
 /**
  * Create a StreamFn that uses CodeBuddy SDK
  *
@@ -298,12 +326,18 @@ function createPartialMessage(
  * that would cause pi-agent-core to attempt execution in OpenClaw's tool registry (which
  * doesn't have matching tools), leading to "Tool not found" errors and infinite retry loops.
  *
- * Conversation history is serialized into the prompt as JSON (Anthropic Messages format)
- * wrapped in XML tags. This allows the model to see prior context while keeping openclaw's
- * session management (truncation, compaction) in full control of history length.
+ * Session management:
+ * - When `sessionId` is provided, passes it to SDK via `options.sessionId`. The SDK CLI
+ *   process persists conversation history to disk, so only the current user message is
+ *   sent as the prompt (no history serialization needed).
+ * - When `sessionId` is NOT provided, falls back to legacy behavior: serializes the full
+ *   conversation history into the prompt text wrapped in XML tags.
  */
-export function createCodeBuddyStreamFn(options?: { queryFn?: CodeBuddyQueryFn }): StreamFn {
-  const { queryFn } = options ?? {};
+export function createCodeBuddyStreamFn(options?: {
+  queryFn?: CodeBuddyQueryFn;
+  sessionId?: string;
+}): StreamFn {
+  const { queryFn, sessionId } = options ?? {};
 
   // The actual query function - either injected for testing or dynamically imported
   let resolvedQueryFn: CodeBuddyQueryFn | null = queryFn ?? null;
@@ -319,6 +353,12 @@ export function createCodeBuddyStreamFn(options?: { queryFn?: CodeBuddyQueryFn }
         try {
           const sdk = await import("@tencent-ai/agent-sdk");
           resolvedQueryFn = sdk.query as unknown as CodeBuddyQueryFn;
+
+          // Lazily trigger CLI prewarming on first successful import
+          if (!prewarmTriggered) {
+            prewarmTriggered = true;
+            void prewarmCodeBuddyCLI(2);
+          }
         } catch {
           const errorMessage: AssistantMessage = createPartialMessage([
             {
@@ -336,17 +376,24 @@ export function createCodeBuddyStreamFn(options?: { queryFn?: CodeBuddyQueryFn }
         }
       }
 
-      // Build prompt with conversation history prepended
-      const prompt = buildPromptWithHistory(context);
+      // Build prompt: with sessionId, SDK manages history on disk — only send current message.
+      // Without sessionId, fall back to serializing full history into the prompt (legacy mode).
+      const prompt = sessionId
+        ? extractPromptFromContext(context)
+        : buildPromptWithHistory(context);
       const systemPrompt = extractSystemPrompt(context);
 
-      // Build query options
+      // Build query options.
+      // When sessionId is set, the SDK CLI process creates or resumes a session with that ID.
+      // The CLI persists conversation history to its own session storage, so the SDK
+      // automatically has access to prior turns without us serializing them.
       const queryOptions: CodeBuddyQueryOptions = {
         model: model.id,
         permissionMode: "bypassPermissions",
         systemPrompt,
         maxTokens: streamOptions?.maxTokens ?? model.maxTokens,
         temperature: streamOptions?.temperature,
+        ...(sessionId ? { sessionId } : {}),
       };
 
       // Track accumulated content for building partial messages
@@ -363,7 +410,6 @@ export function createCodeBuddyStreamFn(options?: { queryFn?: CodeBuddyQueryFn }
 
       try {
         // Call CodeBuddy SDK query()
-        // Conversation history is already embedded in the prompt text
         const stream = resolvedQueryFn({
           prompt,
           options: queryOptions,
